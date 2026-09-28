@@ -1,0 +1,15 @@
+// ==UserScript==
+// @name         Airbnb Sorter
+// @namespace    airbnb-sorter.local
+// @version      {{version}}
+// @description  Собирает всю выдачу поиска Airbnb и показывает её с сортировкой по цене, фото и картой
+// @match        https://www.airbnb.com/*
+// @include      /^https:\/\/www\.airbnb\.[a-z.]+\/.*$/
+// @require      https://unpkg.com/leaflet@1.9.4/dist/leaflet.js#sha256=20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=
+// @resource     leafletCss https://unpkg.com/leaflet@1.9.4/dist/leaflet.css#sha256=p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_getResourceText
+// @run-at       document-idle
+// @noframes
+// ==/UserScript==

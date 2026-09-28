@@ -1,0 +1,15 @@
+{
+  "name": "airbnb-sorter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Userscript: collects the whole Airbnb search and shows it sortable by price",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs --dev",
+    "test": "node --test \"test/**/*.test.js\""
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}
