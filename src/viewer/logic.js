@@ -1,18 +1,20 @@
 // Pure viewer logic: sorting, map-area filtering and all user-visible texts.
 
+// `then` breaks ties (descending): among equal 5.0 ratings, more reviews first.
 export const SORTS = {
   'price-desc': { label: 'Цена ↓', key: l => l.price.amount, dir: -1 },
   'price-asc': { label: 'Цена ↑', key: l => l.price.amount, dir: 1 },
-  'rating-desc': { label: 'Рейтинг ↓', key: l => l.rating, dir: -1 },
-  'reviews-desc': { label: 'Отзывов ↓', key: l => l.reviews, dir: -1 },
+  'rating-desc': { label: 'Рейтинг ↓', key: l => l.rating, dir: -1, then: l => l.reviews },
+  'reviews-desc': { label: 'Отзывов ↓', key: l => l.reviews, dir: -1, then: l => l.rating },
 };
 export const DEFAULT_SORT = 'price-desc';
 
 const byId = (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
-// Sorted copy; listings without a key go last in either direction; ties are ordered by id.
+// Sorted copy; listings without a key go last in either direction; ties go by `then`, then by id.
 export function sortListings(listings, sortId) {
-  const { key, dir } = SORTS[sortId] ?? SORTS[DEFAULT_SORT];
+  const { key, dir, then } = Object.hasOwn(SORTS, sortId) ? SORTS[sortId] : SORTS[DEFAULT_SORT];
+  const tie = then ? (a, b) => (then(b) ?? -1) - (then(a) ?? -1) : () => 0;
   return [...listings].sort((a, b) => {
     const ka = key(a);
     const kb = key(b);
@@ -20,7 +22,7 @@ export function sortListings(listings, sortId) {
       if (ka == null && kb == null) return byId(a, b);
       return ka == null ? 1 : -1;
     }
-    return (ka - kb) * dir || byId(a, b);
+    return (ka - kb) * dir || tie(a, b) || byId(a, b);
   });
 }
 
@@ -32,13 +34,15 @@ export function filterByBounds(listings, { south, west, north, east }) {
 const numberFormat = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 });
 const count = n => numberFormat.format(n);
 
+// Symbols stick to the number ("€1 234"), letter codes get a no-break space ("CHF 1 234").
 export function formatMoney(amount, currency) {
   if (amount == null) return '—';
-  return `${currency ?? ''}${numberFormat.format(amount)}`;
+  const gap = /\p{L}$/u.test(currency ?? '') ? '\u00a0' : '';
+  return `${currency ?? ''}${gap}${numberFormat.format(amount)}`;
 }
 
 export function formatRating({ rating, reviews }) {
-  if (rating == null) return '★ New';
+  if (rating == null) return '★ Новое';
   const value = Number.isInteger(rating) ? rating.toFixed(1) : String(rating);
   return reviews != null ? `★ ${value} (${reviews})` : `★ ${value}`;
 }
@@ -46,9 +50,13 @@ export function formatRating({ rating, reviews }) {
 // Airbnb image URLs accept ?im_w=<width>; without it the original (huge) file is served.
 export function photoUrl(url, width = 720) {
   if (!url) return '';
-  const result = new URL(url);
-  if (!result.searchParams.has('im_w')) result.searchParams.set('im_w', String(width));
-  return result.toString();
+  try {
+    const result = new URL(url);
+    if (!result.searchParams.has('im_w')) result.searchParams.set('im_w', String(width));
+    return result.toString();
+  } catch {
+    return url;
+  }
 }
 
 function plural(n, one, few, many) {
@@ -67,7 +75,9 @@ export function describeSearch({ placeLabel, searchUrl }) {
   const parts = [placeLabel];
   const checkin = params.get('checkin');
   const checkout = params.get('checkout');
-  if (checkin && checkout) parts.push(`${dayMonth.format(new Date(checkin))} – ${dayMonth.format(new Date(checkout))}`);
+  const from = new Date(checkin ?? '');
+  const to = new Date(checkout ?? '');
+  if (!Number.isNaN(from.getTime()) && !Number.isNaN(to.getTime())) parts.push(`${dayMonth.format(from)} – ${dayMonth.format(to)}`);
   const guests = Number(params.get('adults') || 0) + Number(params.get('children') || 0);
   if (guests) parts.push(`${guests} ${plural(guests, 'гость', 'гостя', 'гостей')}`);
   return parts.filter(Boolean).join(' · ');
@@ -95,6 +105,7 @@ export function partialReasons(meta) {
   const reasons = [];
   if (meta.stopReason === 'cancelled') reasons.push('сбор отменён');
   if (meta.stopReason === 'blocked') reasons.push('Airbnb начал блокировать запросы');
+  if (meta.stopReason === 'limit') reasons.push('достигнут предел числа запросов');
   if (meta.failedPages) reasons.push(`не загрузилось страниц: ${meta.failedPages}`);
   if (meta.saturatedRanges) reasons.push(`переполненных ценовых диапазонов: ${meta.saturatedRanges} (часть объявлений недоступна)`);
   return reasons;
