@@ -26,6 +26,13 @@ test('parseSearchUrl without a user price filter', () => {
   assert.equal(userMax, null);
 });
 
+test('a leftover price mode without bounds is dropped, so ranges are nightly', () => {
+  const { searchUrl } = parseSearchUrl(`${BASE}&price_filter_input_type=2&price_filter_num_nights=3`);
+  assert.equal(new URL(searchUrl).searchParams.has('price_filter_input_type'), false);
+  assert.equal(new URL(searchUrl).searchParams.has('price_filter_num_nights'), false);
+  assert.equal(new URL(rangeUrl(searchUrl, { lo: 0, hi: 50 })).searchParams.get('price_filter_input_type'), '0');
+});
+
 test('parseSearchUrl ignores empty, blank, negative and non-numeric bounds', () => {
   for (const bad of ['', '%20', '-5', 'abc']) {
     const { userMin, userMax } = parseSearchUrl(`${BASE}&price_min=${bad}&price_max=${bad}`);

@@ -1,8 +1,9 @@
 // Pure helpers around Airbnb search URLs.
 
-// price_filter_input_type / price_filter_num_nights stay: they say whether price_min/max mean
-// nightly (0) or total-stay (2) prices, and collected ranges must use the user's mode.
 const STRIPPED = ['cursor', 'pagination_search', 'price_min', 'price_max'];
+// Whether price_min/max mean nightly (0) or total-stay (2) prices. Kept when the user set price bounds,
+// so collected ranges use the user's mode; dropped otherwise, so ranges are nightly like the histogram.
+const PRICE_MODE = ['price_filter_input_type', 'price_filter_num_nights'];
 
 function numberParam(params, key) {
   const value = params.get(key);
@@ -15,6 +16,7 @@ export function parseSearchUrl(href) {
   const userMin = numberParam(url.searchParams, 'price_min');
   const userMax = numberParam(url.searchParams, 'price_max');
   for (const key of STRIPPED) url.searchParams.delete(key);
+  if (userMin == null && userMax == null) for (const key of PRICE_MODE) url.searchParams.delete(key);
   return { searchUrl: url.toString(), userMin, userMax };
 }
 
