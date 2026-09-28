@@ -10,7 +10,8 @@ import {
 export function createOverlay({ L, css, onRefresh, onCancel, onClose }) {
   const host = document.createElement('div');
   host.id = 'airbnb-sorter';
-  host.style.display = 'none';
+  // Inline, so no page rule matching the host div can override the placement.
+  host.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:none';
   const shadow = host.attachShadow({ mode: 'open' });
   const style = document.createElement('style');
   style.textContent = css;
@@ -74,11 +75,18 @@ export function createOverlay({ L, css, onRefresh, onCancel, onClose }) {
     refreshBtn.disabled = mode === 'progress';
   }
 
+  // Re-rendering the list resets its scroll, so it only happens when the shown listings actually change.
+  let shownKey = '';
   function render() {
     let shown = state.listings;
     // While hidden (narrow screens, list view) the map has no size and its bounds are meaningless.
     if (state.onlyInMap && map && mapBox.clientWidth > 0) shown = filterByBounds(shown, map.getBounds());
-    list.set(sortListings(shown, state.sortId));
+    const sorted = sortListings(shown, state.sortId);
+    const key = sorted.map(l => l.id).join(',');
+    if (key !== shownKey) {
+      shownKey = key;
+      list.set(sorted);
+    }
     summary.textContent = summaryText(state.meta, state.listings.length, state.onlyInMap ? shown.length : null, { fromCache: state.fromCache });
     const reasons = state.meta.partial ? partialReasons(state.meta) : [];
     warn.hidden = reasons.length === 0;
@@ -97,6 +105,7 @@ export function createOverlay({ L, css, onRefresh, onCancel, onClose }) {
       map.invalidateSize();
       map.fitAll();
     }
+    if (state.meta) render();
   });
   const onKey = e => {
     if (e.key !== 'Escape') return;
@@ -129,6 +138,7 @@ export function createOverlay({ L, css, onRefresh, onCancel, onClose }) {
     },
     showResults({ listings, meta }, { fromCache = false } = {}) {
       Object.assign(state, { listings, meta, fromCache });
+      shownKey = ''; // new data: always re-render, even if the ids are the same
       sub.textContent = describeSearch(meta);
       setMode('results');
       map ??= createMap(mapBox, {

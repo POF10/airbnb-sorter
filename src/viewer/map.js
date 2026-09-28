@@ -29,10 +29,25 @@ export function createMap(container, { L, onMarkerHover, onMoveEnd }) {
     onMoveEnd();
   });
 
+  // A hidden (0×0) map cannot be fitted; the fit then waits for the container to get a size.
+  let pendingFit = false;
   function fitAll() {
     if (markers.size === 0) return;
-    map.fitBounds(L.latLngBounds([...markers.values()].map(m => m.getLatLng())), { padding: [24, 24] });
+    const size = map.getSize();
+    if (!size.x || !size.y) {
+      pendingFit = true;
+      return;
+    }
+    pendingFit = false;
+    const bounds = L.latLngBounds([...markers.values()].map(m => m.getLatLng()));
+    map.fitBounds(bounds, { padding: [24, 24], maxZoom: 16, animate: false });
   }
+
+  // Leaflet only reacts to window resizes; the header wrapping and the list/map switch resize the container too.
+  new ResizeObserver(() => {
+    map.invalidateSize();
+    if (pendingFit) fitAll();
+  }).observe(container);
 
   return {
     setListings(listings) {

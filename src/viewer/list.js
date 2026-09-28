@@ -41,6 +41,7 @@ export function createList({ onHover }) {
     set(listings) {
       items = listings;
       rendered = 0;
+      hovered = null;
       grid.replaceChildren();
       root.scrollTop = 0;
       renderMore();

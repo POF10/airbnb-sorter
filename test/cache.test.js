@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadCache, saveCache } from '../src/cache.js';
+import { loadCache, saveCache, cacheKey } from '../src/cache.js';
 
 function memoryStorage() {
   const data = new Map();
@@ -44,4 +44,25 @@ test('storage failures are swallowed', () => {
   } finally {
     console.warn = warn;
   }
+});
+
+test('photos are trimmed to 10 in the cache', () => {
+  const storage = memoryStorage();
+  const photos = Array.from({ length: 27 }, (_, i) => `https://a0.muscache.com/im/pictures/${i}.jpeg`);
+  saveCache(storage, URL_A, { listings: [{ id: '1', photos }], meta: collection.meta });
+  assert.deepEqual(loadCache(storage, URL_A).listings[0].photos, photos.slice(0, 10));
+});
+
+test('a cache written by another version is ignored', () => {
+  const storage = memoryStorage();
+  storage.set('lastCollection', { key: cacheKey(URL_A), listings: [{ id: '1' }], meta: {} });
+  assert.equal(loadCache(storage, URL_A), null);
+});
+
+test('tracking params and parameter order do not change the cache key', () => {
+  assert.equal(
+    cacheKey('https://www.airbnb.com/s/Riga--Latvia/homes?adults=2&checkin=2026-10-16&search_type=filter_change&source=structured_search_input_header'),
+    cacheKey('https://www.airbnb.com/s/Riga--Latvia/homes?checkin=2026-10-16&adults=2'),
+  );
+  assert.notEqual(cacheKey(URL_A), cacheKey(URL_B));
 });

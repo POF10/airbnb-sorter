@@ -10,7 +10,7 @@ function mulberry32(seed) {
 
 const TYPES = ['Apartment in Riga', 'Condo in Centrs', 'Loft in Old Riga', 'Home in Āgenskalns', 'Guest suite in Teika'];
 
-export function sampleCollection({ count = 420, partial = false } = {}) {
+export function sampleCollection({ count = 1300, partial = false } = {}) {
   const random = mulberry32(42);
   const listings = Array.from({ length: count }, (_, i) => {
     const id = String(100000 + i);
@@ -23,7 +23,7 @@ export function sampleCollection({ count = 420, partial = false } = {}) {
       url: `https://www.airbnb.com/rooms/${id}?check_in=2026-10-16&check_out=2026-10-19&adults=2`,
       title: TYPES[i % TYPES.length],
       name: `Sample listing #${i + 1} with a fairly long descriptive name`,
-      photos: Array.from({ length: 1 + (i % 6) }, (_, k) => `https://picsum.photos/seed/${id}-${k}/600/570`),
+      photos: Array.from({ length: 1 + ((i * 7) % 27) }, (_, k) => `https://picsum.photos/seed/${id}-${k}/600/570`),
       price: { amount: total, currency: '€', label: `€${total} total`, qualifier: 'total', original: discounted ? Math.round(total * 1.2) : null },
       pricePerNight: Math.round((total / 3) * 100) / 100,
       rating: noRating ? null : Math.round((4 + random()) * 100) / 100,
@@ -42,7 +42,7 @@ export function sampleCollection({ count = 420, partial = false } = {}) {
       nights: 3,
       placeLabel: 'Riga, Latvia',
       collectedAt: new Date().toISOString(),
-      expectedTotal: 431,
+      expectedTotal: 1320,
       saturatedRanges: partial ? 1 : 0,
       failedPages: 0,
       partial,

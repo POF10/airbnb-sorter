@@ -23,9 +23,9 @@ import { sampleCollection } from './sample-data.js';
     overlay.showProgress(null);
     let pages = 0;
     timer = setInterval(() => {
-      pages += 4;
-      overlay.showProgress({ ranges: Math.ceil(pages / 8), pagesDone: pages, pagesPlanned: 24, listings: Math.min(420, pages * 18), expectedTotal: 431 });
-      if (pages >= 24) {
+      pages += 12;
+      overlay.showProgress({ ranges: Math.ceil(pages / 8), pagesDone: pages, pagesPlanned: 74, listings: Math.min(1300, pages * 18), expectedTotal: 1320 });
+      if (pages >= 74) {
         clearInterval(timer);
         overlay.showResults(sampleCollection());
       }
