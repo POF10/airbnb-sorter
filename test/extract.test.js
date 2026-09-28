@@ -46,3 +46,30 @@ test('missing results -> ExtractError naming the path', () => {
   const html = pageHtml({ niobeClientData: [['StaysSearch:{}', { data: { presentation: { staysSearch: {} } } }]] });
   assert.throws(() => extractSearchPage(html), { name: 'ExtractError', message: /staysSearch\.results/ });
 });
+
+test('no niobeClientData -> ExtractError', () => {
+  assert.throws(() => extractSearchPage(pageHtml({})), { name: 'ExtractError', message: /niobeClientData/ });
+});
+
+test('"</script>" inside the data does not end the state script', () => {
+  const html = pageHtml(searchState({ results: [{ ...rawResult({ id: 1, nightly: 50 }), title: 'Nice </script> flat' }], pageCursors: [] }));
+  assert.equal(extractSearchPage(html).results[0].title, 'Nice </script> flat');
+});
+
+test('the price item is found by its price_min/price_max keys', () => {
+  const state = searchState({ results: [], pageCursors: [], histogram: [4, 6], min: 30, max: 520 });
+  const { sections } = state.niobeClientData[1][1].data.presentation.staysSearch.results.filters.filterPanel.filterPanelSections;
+  sections.unshift({ sectionData: { discreteFilterItems: [{ minValue: '0', maxValue: '50', priceHistogram: [99] }] } });
+  assert.deepEqual(extractSearchPage(pageHtml(state)).priceFilter, { min: 30, max: 520, histogramTotal: 10 });
+});
+
+test('non-numeric price filter values become null', () => {
+  const state = searchState({ results: [], pageCursors: [], histogram: [{ count: 5 }], max: '520+' });
+  assert.deepEqual(extractSearchPage(pageHtml(state)).priceFilter, { min: 30, max: null, histogramTotal: null });
+});
+
+test('non-array pageCursors become []', () => {
+  const state = searchState({ results: [], pageCursors: [] });
+  state.niobeClientData[1][1].data.presentation.staysSearch.results.paginationInfo.pageCursors = {};
+  assert.deepEqual(extractSearchPage(pageHtml(state)).pageCursors, []);
+});

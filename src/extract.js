@@ -9,19 +9,21 @@ export class ExtractError extends Error {
 
 const STATE_RE = /<script id="data-deferred-state-0"[^>]*>([\s\S]*?)<\/script>/;
 
+const toNumber = v => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+const hasHistogram = item => Array.isArray(item?.priceHistogram);
+const isPriceItem = item => (item?.searchParams?.params ?? []).some(p => p?.key === 'price_min' || p?.key === 'price_max');
+
+// The price slider item: the one filtering by price_min/price_max, else the first one with a histogram.
 function findPriceFilter(filters) {
-  const toNumber = v => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
-  for (const section of filters?.filterPanel?.filterPanelSections?.sections ?? []) {
-    for (const item of section?.sectionData?.discreteFilterItems ?? []) {
-      if (!Array.isArray(item?.priceHistogram)) continue;
-      return {
-        min: toNumber(item.minValue),
-        max: toNumber(item.maxValue),
-        histogramTotal: item.priceHistogram.reduce((sum, n) => sum + (Number(n) || 0), 0),
-      };
-    }
-  }
-  return null;
+  const items = (filters?.filterPanel?.filterPanelSections?.sections ?? []).flatMap(s => s?.sectionData?.discreteFilterItems ?? []);
+  const item = items.find(i => hasHistogram(i) && isPriceItem(i)) ?? items.find(hasHistogram);
+  if (!item) return null;
+  const counts = item.priceHistogram.map(Number).filter(Number.isFinite);
+  return {
+    min: toNumber(item.minValue),
+    max: toNumber(item.maxValue),
+    histogramTotal: counts.length ? counts.reduce((sum, n) => sum + n, 0) : null,
+  };
 }
 
 // Search page HTML -> { results: StaySearchResult[], pageCursors: string[], priceFilter: {min,max,histogramTotal}|null }.
@@ -41,9 +43,10 @@ export function extractSearchPage(html) {
   const results = entry[1]?.data?.presentation?.staysSearch?.results;
   if (!results) throw new ExtractError('нет …staysSearch.results');
   if (!Array.isArray(results.searchResults)) throw new ExtractError('нет …staysSearch.results.searchResults');
+  const cursors = results.paginationInfo?.pageCursors;
   return {
     results: results.searchResults,
-    pageCursors: results.paginationInfo?.pageCursors ?? [],
+    pageCursors: Array.isArray(cursors) ? cursors.filter(c => typeof c === 'string') : [],
     priceFilter: findPriceFilter(results.filters),
   };
 }

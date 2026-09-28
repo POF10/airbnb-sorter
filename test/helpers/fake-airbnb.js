@@ -38,31 +38,46 @@ export function searchState({ results, pageCursors, histogram = [0], min = 30, m
         paginationInfo: { pageCursors },
         filters: { filterPanel: { filterPanelSections: { sections: [
           { sectionData: { discreteFilterItems: [{ minValue: '0', maxValue: '8' }] } },
-          { sectionData: { discreteFilterItems: [{ minValue: String(min), maxValue: String(max), priceHistogram: histogram }] } },
+          { sectionData: { discreteFilterItems: [{
+            searchParams: { params: [{ key: 'price_min' }, { key: 'price_max' }] },
+            minValue: String(min),
+            maxValue: String(max),
+            priceHistogram: histogram,
+          }] } },
         ] } } },
       } } } } }],
     ],
   };
 }
 
+// Like Airbnb, escapes "<" in the JSON so "</script>" inside data cannot end the tag.
 export function pageHtml(state) {
-  return `<!doctype html><html><head></head><body><script id="data-deferred-state-0" data-deferred-state-0="true" type="application/json">${JSON.stringify(state)}</script></body></html>`;
+  const json = JSON.stringify(state).replace(/</g, '\\u003c');
+  return `<!doctype html><html><head><script src="/app.js"></script></head><body><script id="data-deferred-state-0" data-deferred-state-0="true" type="application/json">${json}</script><script>window.x = 1;</script></body></html>`;
 }
 
 export function listingsWithPrices(prices) {
   return prices.map((nightly, i) => ({ id: i + 1, nightly }));
 }
 
+// Rejects like fetch() does once the request's signal is aborted.
+function throwIfAborted(signal) {
+  if (signal?.aborted) throw new DOMException('This operation was aborted', 'AbortError');
+}
+
+// latencyMs = 0 answers without yielding, so maxInFlight is only meaningful with some latency.
 export function fakeAirbnb(listings, { latencyMs = 0, histogramMax = 520 } = {}) {
   const calls = [];
   let inFlight = 0;
   let maxInFlight = 0;
-  async function fetchPage(url) {
+  async function fetchPage(url, signal) {
     calls.push(url);
     inFlight++;
     maxInFlight = Math.max(maxInFlight, inFlight);
     try {
+      throwIfAborted(signal);
       if (latencyMs) await new Promise(resolve => setTimeout(resolve, latencyMs));
+      throwIfAborted(signal);
       const params = new URL(url).searchParams;
       const min = params.has('price_min') ? Number(params.get('price_min')) : 0;
       const max = params.has('price_max') ? Number(params.get('price_max')) : Infinity;
