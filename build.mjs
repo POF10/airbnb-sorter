@@ -8,9 +8,9 @@ const header = (await readFile('src/header.txt', 'utf8')).replace('{{version}}',
 const common = { bundle: true, format: 'iife', target: 'es2020', charset: 'utf8', legalComments: 'none', loader: { '.css': 'text' } };
 
 if (process.argv.includes('--dev')) {
-  const ctx = await esbuild.context({ ...common, entryPoints: ['dev/dev.js'], outfile: 'dev/dev.bundle.js', sourcemap: 'inline' });
+  const ctx = await esbuild.context({ ...common, entryPoints: ['dev/dev.js'], outfile: 'dev/dev.bundle.js', sourcemap: 'inline', logLevel: 'info' });
   await ctx.watch();
-  const { port } = await ctx.serve({ servedir: 'dev', port: 8000 });
+  const { port } = await ctx.serve({ servedir: 'dev', host: '127.0.0.1', port: 8000 });
   console.log(`dev stand: http://localhost:${port}/`);
 } else {
   await mkdir('dist', { recursive: true });

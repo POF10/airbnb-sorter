@@ -244,9 +244,9 @@ airbnb-sorter/
 
 ## Сборка и установка
 
-- `npm run build`: esbuild бандлит `src/main.js` в IIFE (ES2020), CSS инлайнится строкой, шапка из `src/header.txt` с версией из `package.json` → `dist/airbnb-sorter.user.js`.
+- `npm run build`: esbuild бандлит `src/userscript.js` (он передаёт `GM_*` в `main.js`) в IIFE (ES2020), CSS инлайнится строкой, шапка из `src/header.txt` с версией из `package.json` → `dist/airbnb-sorter.user.js`.
 - Шапка userscript:
-  - `@match https://www.airbnb.com/*`; прочие домены Airbnb — `@include` с регуляркой `^https://www\.airbnb\.[a-z.]+/`;
+  - `@match https://www.airbnb.com/*`; прочие домены и языковые поддомены Airbnb (`lv.airbnb.com`, `www.airbnb.co.uk`, `fr.airbnb.ch`, …) — `@include` с регуляркой `^https://[a-z][a-z-]*\.airbnb\.(?:[a-z]{2,3}|com?\.[a-z]{2})/` (не пропускает `www.airbnb.com.evil.io`);
   - `@require https://unpkg.com/leaflet@1.9.4/dist/leaflet.js#sha256=20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=` (хэши сверены 2026-09-28);
   - `@resource leafletCss https://unpkg.com/leaflet@1.9.4/dist/leaflet.css#sha256=p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=` — вставляется в Shadow DOM через `GM_getResourceText`;
   - `@grant GM_getValue`, `GM_setValue`, `GM_getResourceText`;
