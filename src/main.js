@@ -1,8 +1,9 @@
 import { collect, HttpError } from './collector.js';
-import { parseSearchUrl } from './search-url.js';
+import { parseSearchUrl, placeLabel } from './search-url.js';
 import { loadCache, saveCache } from './cache.js';
 import { createLauncher } from './launcher.js';
 import { createOverlay } from './viewer/overlay.js';
+import { describeSearch } from './viewer/logic.js';
 import css from './viewer/styles.css';
 
 async function fetchPage(url, signal) {
@@ -15,6 +16,7 @@ async function fetchPage(url, signal) {
 export function start({ L, leafletCss, storage }) {
   let overlay = null;
   let controller = null;
+  let running = false;
 
   const getOverlay = () => (overlay ??= createOverlay({
     L,
@@ -27,30 +29,45 @@ export function start({ L, leafletCss, storage }) {
   async function run(force) {
     const view = getOverlay();
     view.open();
-    const { searchUrl } = parseSearchUrl(location.href);
-    const cached = force ? null : loadCache(storage, searchUrl);
-    if (cached) {
-      view.showResults(cached, { fromCache: true });
-      return;
-    }
+    // Clicking the launcher again while collecting only brings the overlay back; it never restarts the run.
+    if (running && !force) return;
+    const href = location.href;
+    const { searchUrl } = parseSearchUrl(href);
+    // Replaced before the cache check, so a run still winding down cannot overwrite what is shown next.
     controller?.abort();
     const current = (controller = new AbortController());
-    view.showProgress(null);
+
+    const cached = force ? null : loadCache(storage, searchUrl);
+    if (cached) {
+      try {
+        view.showResults(cached, { fromCache: true });
+        return;
+      } catch (e) {
+        console.warn('[airbnb-sorter] кэш не отображается, собираю заново', e);
+      }
+    }
+
+    running = true;
+    view.showProgress(null, describeSearch({ placeLabel: placeLabel(searchUrl), searchUrl }));
+    let result;
     try {
-      const result = await collect(location.href, {
+      result = await collect(href, {
         fetchPage,
         signal: current.signal,
         onProgress: p => { if (current === controller) view.showProgress(p); },
       });
-      if (current !== controller) return;
-      // A cancelled run is shown but not cached, so the next click collects afresh.
-      if (result.meta.stopReason !== 'cancelled') saveCache(storage, searchUrl, result);
-      view.showResults(result);
     } catch (e) {
       if (current !== controller) return;
       console.error('[airbnb-sorter]', e);
       view.showError(e.message);
+      return;
+    } finally {
+      if (current === controller) running = false;
     }
+    if (current !== controller) return;
+    // A cancelled run is shown but not cached, so the next click collects afresh.
+    if (result.meta.stopReason !== 'cancelled') saveCache(storage, searchUrl, result);
+    view.showResults(result);
   }
 
   createLauncher(() => run(false));

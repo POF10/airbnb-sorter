@@ -12,7 +12,7 @@ function memoryStorage() {
 
 const URL_A = 'https://www.airbnb.com/s/Riga--Latvia/homes?adults=2';
 const URL_B = 'https://www.airbnb.com/s/Riga--Latvia/homes?adults=3';
-const collection = { listings: [{ id: '1' }], meta: { collectedAt: '2026-09-28T12:00:00.000Z' } };
+const collection = { listings: [{ id: '1' }], meta: { searchUrl: URL_A, collectedAt: '2026-09-28T12:00:00.000Z' } };
 
 test('returns the saved collection for the same search', () => {
   const storage = memoryStorage();
@@ -65,4 +65,10 @@ test('tracking params and parameter order do not change the cache key', () => {
     cacheKey('https://www.airbnb.com/s/Riga--Latvia/homes?checkin=2026-10-16&adults=2'),
   );
   assert.notEqual(cacheKey(URL_A), cacheKey(URL_B));
+});
+
+test('an entry without usable meta is ignored', () => {
+  const storage = memoryStorage();
+  storage.set('lastCollection', { v: 1, key: cacheKey(URL_A), listings: [{ id: '1' }], meta: null });
+  assert.equal(loadCache(storage, URL_A), null);
 });

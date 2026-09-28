@@ -54,6 +54,7 @@ export function createOverlay({ L, css, onRefresh, onCancel, onClose }) {
   const errorBox = el('div', 'abs-error');
   let map = null;
   const list = createList({ onHover: id => map?.highlight(id) });
+  list.el.tabIndex = -1; // focus target on open: keys scroll the list instead of re-pressing the launcher
   const mapBox = el('div', 'abs-map');
   const main = el('main', 'abs-main');
   main.append(list.el, mapBox);
@@ -73,6 +74,7 @@ export function createOverlay({ L, css, onRefresh, onCancel, onClose }) {
     sortSelect.disabled = mode !== 'results';
     areaBox.disabled = mode !== 'results';
     refreshBtn.disabled = mode === 'progress';
+    summaryLine.hidden = mode !== 'results'; // counts belong to the results on screen
   }
 
   // Re-rendering the list resets its scroll, so it only happens when the shown listings actually change.
@@ -120,6 +122,7 @@ export function createOverlay({ L, css, onRefresh, onCancel, onClose }) {
       savedOverflow = document.documentElement.style.overflow;
       document.documentElement.style.overflow = 'hidden';
       window.addEventListener('keydown', onKey, true);
+      list.el.focus({ preventScroll: true });
     },
     close() {
       if (host.style.display === 'none') return;
@@ -128,8 +131,10 @@ export function createOverlay({ L, css, onRefresh, onCancel, onClose }) {
       window.removeEventListener('keydown', onKey, true);
       onClose();
     },
-    showProgress(p) {
+    // title: the search being collected (the header may still show the previous one).
+    showProgress(p, title) {
       setMode('progress');
+      if (title !== undefined) sub.textContent = title;
       progressLabel.textContent = progressText(p);
     },
     showError(message) {

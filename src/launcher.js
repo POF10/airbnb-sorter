@@ -14,7 +14,10 @@ export function createLauncher(onClick) {
   btn.type = 'button';
   btn.textContent = '↕ Сортировать все';
   btn.setAttribute('style', STYLE);
-  btn.addEventListener('click', onClick);
+  btn.addEventListener('click', () => {
+    btn.blur(); // otherwise Space/Enter under the overlay would press it again
+    onClick();
+  });
   document.body.append(btn);
 
   let lastHref = null;

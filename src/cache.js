@@ -18,7 +18,8 @@ export function cacheKey(searchUrl) {
 export function loadCache(storage, searchUrl) {
   try {
     const cached = storage.get(KEY, null);
-    return cached && cached.v === VERSION && cached.key === cacheKey(searchUrl) && Array.isArray(cached.listings)
+    const valid = cached && cached.v === VERSION && Array.isArray(cached.listings) && typeof cached.meta?.searchUrl === 'string';
+    return valid && cached.key === cacheKey(searchUrl)
       ? { listings: cached.listings, meta: cached.meta }
       : null;
   } catch {
