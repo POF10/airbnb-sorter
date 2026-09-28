@@ -9,13 +9,14 @@ export class ExtractError extends Error {
 
 const STATE_RE = /<script id="data-deferred-state-0"[^>]*>([\s\S]*?)<\/script>/;
 
+const list = v => (Array.isArray(v) ? v : []);
 const toNumber = v => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
 const hasHistogram = item => Array.isArray(item?.priceHistogram);
-const isPriceItem = item => (item?.searchParams?.params ?? []).some(p => p?.key === 'price_min' || p?.key === 'price_max');
+const isPriceItem = item => list(item?.searchParams?.params).some(p => p?.key === 'price_min' || p?.key === 'price_max');
 
 // The price slider item: the one filtering by price_min/price_max, else the first one with a histogram.
 function findPriceFilter(filters) {
-  const items = (filters?.filterPanel?.filterPanelSections?.sections ?? []).flatMap(s => s?.sectionData?.discreteFilterItems ?? []);
+  const items = list(filters?.filterPanel?.filterPanelSections?.sections).flatMap(s => list(s?.sectionData?.discreteFilterItems));
   const item = items.find(i => hasHistogram(i) && isPriceItem(i)) ?? items.find(hasHistogram);
   if (!item) return null;
   const counts = item.priceHistogram.map(Number).filter(Number.isFinite);
@@ -27,7 +28,17 @@ function findPriceFilter(filters) {
 }
 
 // Search page HTML -> { results: StaySearchResult[], pageCursors: string[], priceFilter: {min,max,histogramTotal}|null }.
+// Any other failure (Airbnb changed the structure) also becomes an ExtractError, never a TypeError.
 export function extractSearchPage(html) {
+  try {
+    return parseSearchPage(html);
+  } catch (e) {
+    if (e instanceof ExtractError) throw e;
+    throw new ExtractError(`неожиданная структура страницы: ${e.message}`);
+  }
+}
+
+function parseSearchPage(html) {
   const m = STATE_RE.exec(html);
   if (!m) throw new ExtractError('нет <script id="data-deferred-state-0">');
   let state;

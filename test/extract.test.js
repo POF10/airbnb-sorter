@@ -73,3 +73,9 @@ test('non-array pageCursors become []', () => {
   state.niobeClientData[1][1].data.presentation.staysSearch.results.paginationInfo.pageCursors = {};
   assert.deepEqual(extractSearchPage(pageHtml(state)).pageCursors, []);
 });
+
+test('non-array filter sections are ignored', () => {
+  const state = searchState({ results: [], pageCursors: [] });
+  state.niobeClientData[1][1].data.presentation.staysSearch.results.filters.filterPanel.filterPanelSections.sections = {};
+  assert.equal(extractSearchPage(pageHtml(state)).priceFilter, null);
+});

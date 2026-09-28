@@ -154,20 +154,138 @@ test('404 is not retried', async () => {
 });
 
 test('a blocked page stops the run and keeps what was collected', async () => {
-  const air = fakeAirbnb(listingsWithPrices(range(1, 100)));
-  const fetchPage = async (url, signal) => (pageOffset(url) >= 36 ? '<html><body>captcha</body></html>' : air.fetchPage(url, signal));
+  const air = fakeAirbnb(listingsWithPrices(range(1, 250)));
+  let captchas = 0;
+  const fetchPage = async (url, signal) => {
+    if (pageOffset(url) < 36) return air.fetchPage(url, signal);
+    captchas++;
+    return '<html><body>captcha</body></html>';
+  };
   const { listings, meta } = await collect(HREF, { fetchPage, ...fast });
   assert.equal(meta.stopReason, 'blocked');
   assert.equal(meta.partial, true);
-  assert.ok(listings.length >= 18 && listings.length < 100);
+  assert.ok(listings.length >= 18 && listings.length < 250);
+  assert.ok(captchas <= 3, `requests after the block: ${captchas}`);
 });
 
-test('no data on the very first page rejects with ExtractError', async () => {
-  await assert.rejects(collect(HREF, { fetchPage: async () => '<html>login</html>', ...fast }), ExtractError);
+test('no data on the very first page rejects with ExtractError without retrying', async () => {
+  let calls = 0;
+  const fetchPage = async () => { calls++; return '<html>login</html>'; };
+  await assert.rejects(collect(HREF, { fetchPage, ...fast }), ExtractError);
+  assert.equal(calls, 1);
+});
+
+test('403 stops the run as blocked', async () => {
+  const air = fakeAirbnb(listingsWithPrices(range(1, 250)));
+  let refused = 0;
+  const fetchPage = async (url, signal) => {
+    if (pageOffset(url) < 36) return air.fetchPage(url, signal);
+    refused++;
+    throw new HttpError(403);
+  };
+  const { meta } = await collect(HREF, { fetchPage, ...fast });
+  assert.equal(meta.stopReason, 'blocked');
+  assert.ok(refused <= 3, `requests after the block: ${refused}`);
+});
+
+test('pages failing three times in a row stop the run as blocked', async () => {
+  const air = fakeAirbnb(listingsWithPrices(range(1, 250))); // 14 pages
+  let failed = 0;
+  const fetchPage = async (url, signal) => {
+    if (pageOffset(url) < 36) return air.fetchPage(url, signal);
+    failed++;
+    throw new HttpError(503);
+  };
+  const { meta } = await collect(HREF, { fetchPage, ...fast });
+  assert.equal(meta.stopReason, 'blocked');
+  assert.ok(meta.failedPages >= 3 && meta.failedPages < 12, `failed pages: ${meta.failedPages}`);
+  assert.ok(failed <= 5 * 4, `failed requests: ${failed}`);
+});
+
+test('stops at the request budget if Airbnb ignores the price filter', async () => {
+  const air = fakeAirbnb(listingsWithPrices(range(1, 400)));
+  let requests = 0;
+  const fetchPage = async (url, signal) => {
+    requests++;
+    const ignored = new URL(url);
+    ignored.searchParams.delete('price_min');
+    ignored.searchParams.delete('price_max');
+    return air.fetchPage(ignored.toString(), signal);
+  };
+  const { meta } = await collect(HREF, { fetchPage, ...fast });
+  assert.equal(meta.stopReason, 'limit');
+  assert.equal(meta.partial, true);
+  assert.ok(requests <= 300, `requests: ${requests}`);
+});
+
+test('maxRequests overrides the budget', async () => {
+  const air = fakeAirbnb(listingsWithPrices(range(1, 100)));
+  const { listings, meta } = await collect(HREF, { fetchPage: air.fetchPage, maxRequests: 2, ...fast });
+  assert.equal(meta.stopReason, 'limit');
+  assert.equal(listings.length, 36);
 });
 
 test('a failing first page rejects with its error', async () => {
   await assert.rejects(collect(HREF, { fetchPage: async () => { throw new HttpError(404); }, ...fast }), HttpError);
+});
+
+test('cancel during the first page resolves with nothing collected', async () => {
+  const controller = new AbortController();
+  const fetchPage = async () => {
+    controller.abort();
+    throw new DOMException('This operation was aborted', 'AbortError');
+  };
+  const { listings, meta } = await collect(HREF, { fetchPage, signal: controller.signal, ...fast });
+  assert.equal(listings.length, 0);
+  assert.equal(meta.stopReason, 'cancelled');
+});
+
+test('no requests are sent after cancel', async () => {
+  const air = fakeAirbnb(listingsWithPrices(range(1, 250)), { latencyMs: 5 });
+  const controller = new AbortController();
+  let calls = 0;
+  const fetchPage = async (url, signal) => {
+    if (++calls === 4) controller.abort();
+    return air.fetchPage(url, signal);
+  };
+  const { meta } = await collect(HREF, { fetchPage, signal: controller.signal, ...fast });
+  assert.equal(meta.stopReason, 'cancelled');
+  assert.equal(calls, 4);
+});
+
+test('cancel interrupts a retry wait', async () => {
+  const air = fakeAirbnb(listingsWithPrices(range(1, 40)));
+  const controller = new AbortController();
+  const fetchPage = async (url, signal) => {
+    if (pageOffset(url) !== 18) return air.fetchPage(url, signal);
+    setTimeout(() => controller.abort(), 20);
+    throw new HttpError(503);
+  };
+  const started = Date.now();
+  const { meta } = await collect(HREF, { fetchPage, signal: controller.signal, pause: async () => {}, retryDelays: [10_000] });
+  assert.equal(meta.stopReason, 'cancelled');
+  assert.ok(Date.now() - started < 2000);
+});
+
+test('a throwing onProgress does not break the run', async () => {
+  const air = fakeAirbnb(listingsWithPrices(range(1, 40)));
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    const { listings } = await collect(HREF, { fetchPage: air.fetchPage, onProgress: () => { throw new Error('ui'); }, ...fast });
+    assert.equal(listings.length, 40);
+  } finally {
+    console.warn = warn;
+  }
+});
+
+test('progress without an expected total still plans every page', async () => {
+  const air = fakeAirbnb(listingsWithPrices(range(1, 300)));
+  const seen = [];
+  await collect(`${HREF}&price_min=100&price_max=150`, { fetchPage: air.fetchPage, onProgress: p => seen.push(p), ...fast });
+  assert.ok(seen.every(p => p.pagesPlanned >= p.pagesDone));
+  assert.equal(seen.at(-1).pagesPlanned, 3);
+  assert.equal(seen.at(-1).expectedTotal, null);
 });
 
 test('cancel returns the listings collected so far', async () => {
