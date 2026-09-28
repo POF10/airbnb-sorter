@@ -18,7 +18,7 @@ function parseNumber(raw) {
 // -> { amount, currency } or null when there is no number.
 export function parsePrice(text) {
   if (typeof text !== 'string') return null;
-  const s = text.replace(/[  ]/g, ' ').trim();
+  const s = text.replace(/[\u00a0\u202f]/g, ' ').trim();
   const m = /\d[\d\s.,]*/.exec(s);
   if (!m) return null;
   const amount = parseNumber(m[0].trim());

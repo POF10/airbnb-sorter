@@ -11,7 +11,7 @@ test('plain euro', () => {
 });
 
 test('currency suffix with no-break space grouping', () => {
-  assert.deepEqual(parsePrice('1 234 €'), { amount: 1234, currency: '€' });
+  assert.deepEqual(parsePrice('1\u00a0234\u00a0€'), { amount: 1234, currency: '€' });
 });
 
 test('dollar with decimals', () => {
@@ -23,7 +23,7 @@ test('yen', () => {
 });
 
 test('rouble with narrow no-break spaces', () => {
-  assert.deepEqual(parsePrice('₽ 12 345'), { amount: 12345, currency: '₽' });
+  assert.deepEqual(parsePrice('₽\u202f12\u202f345'), { amount: 12345, currency: '₽' });
 });
 
 test('dot as thousands separator', () => {
