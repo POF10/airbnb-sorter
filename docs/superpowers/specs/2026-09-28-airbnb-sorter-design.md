@@ -48,8 +48,9 @@
 | `title` | `title` (например «Condo in Centrs») |
 | `name` | `nameLocalized.localizedStringWithTranslationPreference` (запасной — `subtitle`) |
 | `photos` | `contextualPictures[].picture` |
-| цена | `structuredDisplayPrice.primaryLine`: `QualifiedDisplayPriceLine` → `price`, `qualifier`, `accessibilityLabel`; `DiscountedDisplayPriceLine` → `discountedPrice`, `originalPrice`, `qualifier` |
-| `rating`, `reviews` | `avgRatingLocalized`: `"5.0 (200)"` или `"New"` (→ `null`) |
+| цена | `structuredDisplayPrice.primaryLine`: `QualifiedDisplayPriceLine` → `price`, `qualifier`, `accessibilityLabel`; `DiscountedDisplayPriceLine` → `discountedPrice`, `originalPrice`, `qualifier`; `OrderedDisplayPriceLine` (отели) → те же поля, разложенные по `orderedComponents[]`. `qualifier` локализован («total», «kopā», «Всего»); признак «итог за поездку», не зависящий от языка, — `structuredDisplayPrice.displayPriceStyle` = `REGULATED_TOTAL` |
+| `rating`, `reviews` | `avgRatingLocalized`: `"5.0 (200)"`, в lv/ru `"5,0 (200)"`, или `"New"`/`"Новое"` (→ `null`) |
+| даты цены | в поиске **без дат** цены — тоже итоги, но у каждого объявления за свои даты: `listingParamOverrides.checkin/checkout` (обычно 5 ночей); в поиске с датами `listingParamOverrides` = `null` |
 | `details` | `structuredContent.primaryLine[].body` (тип `BEDINFO`: «1 bedroom», «2 beds») |
 | `badges` | `badges[].text` («Guest favorite») |
 
@@ -120,10 +121,10 @@ airbnb-sorter/
     amount: 223,            // число из показанной цены (со скидкой — цена со скидкой); null, если не разобрали
     currency: "€",          // как показал Airbnb
     label: "€223 total",    // accessibilityLabel
-    qualifier: "total",     // "total" | "night" | … как у Airbnb
+    qualifier: "total",     // как у Airbnb, локализован: "total", "kopā", "Всего"…
     original: null,         // число до скидки или null
   },
-  pricePerNight: 74.33,     // amount / nights, если qualifier = total и даты известны; иначе null
+  pricePerNight: 74.33,     // amount / nights, если цена — итог (displayPriceStyle ~ TOTAL или qualifier = total); nights — из listingParamOverrides или из поиска; иначе null
   rating: 5.0,              // null для "New"/нет отзывов
   reviews: 200,             // null, если нет
   lat: 56.9536, lng: 24.1324, // null, если нет координат
@@ -146,7 +147,7 @@ airbnb-sorter/
 }
 ```
 
-`url` строится из `origin` + `/rooms/<id>` + параметры `check_in`, `check_out`, `adults`, `children`, `infants`, `pets` из поиска (те, что есть).
+`url` строится из `origin` + `/rooms/<id>` + параметры `check_in`, `check_out`, `adults`, `children`, `infants`, `pets` из поиска (те, что есть); в поиске без дат `check_in`/`check_out` берутся из `listingParamOverrides` объявления — за эти даты и показана цена.
 
 ## Алгоритм сбора
 
@@ -234,7 +235,7 @@ airbnb-sorter/
 
 `npm test` → `node --test`.
 
-- **Фикстуры:** `test/fixtures/riga.js` — урезанные реальные `StaySearchResult` из выдачи по Риге (обычный, `DiscountedDisplayPriceLine`, `"New"`, без координат, без id); структура путей сохранена. `test/helpers/fake-airbnb.js` — синтетический Airbnb, который отдаёт HTML страниц поиска и честно учитывает `price_min`/`price_max`/`cursor`, 18 на страницу, максимум 15 страниц. Реальные данные целиком проверяются живой приёмкой.
+- **Фикстуры:** `test/fixtures/riga.js` — урезанные реальные `StaySearchResult` из выдачи по Риге (обычный; производные с реальной формой полей: `DiscountedDisplayPriceLine`, `"New"`, без координат, без id, ru-локализация, поиск без дат, `OrderedDisplayPriceLine`); структура путей сохранена. `test/helpers/fake-airbnb.js` — синтетический Airbnb, который отдаёт HTML страниц поиска и честно учитывает `price_min`/`price_max`/`cursor`, 18 на страницу, максимум 15 страниц. Реальные данные целиком проверяются живой приёмкой.
 - `price.test.js`: `€1,234`, `1 234 €` (неразрывный пробел), `$1,234.50`, `¥12,345`, `₽ 12 345`, мусор → `null`.
 - `extract.test.js`: фикстура в HTML-обёртке → результаты, 15 курсоров, `min/max/histogramTotal`; нет блока / нет `StaysSearch:` → `ExtractError`.
 - `normalize.test.js`: ключевые поля `Listing` на фикстуре; скидка; «New»; отсутствующие координаты; декодирование `id` из base64.

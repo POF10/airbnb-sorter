@@ -1,5 +1,6 @@
 // Trimmed real StaySearchResult objects (structure preserved) from
 // https://www.airbnb.com/s/Riga--Latvia/homes?checkin=2026-10-16&checkout=2026-10-19&adults=2, captured 2026-09-28.
+// `regular` is real; the other fixtures are variations of it with real field shapes (ids like 42 are made up).
 export const RIGA_URL = 'https://www.airbnb.com/s/Riga--Latvia/homes?checkin=2026-10-16&checkout=2026-10-19&adults=2';
 
 export const regular = {
@@ -60,3 +61,39 @@ export const noCoords = {
 };
 
 export const noId = { ...regular, demandStayListing: null };
+
+// Shapes seen on ru.airbnb.com the same day: localized qualifier and rating, prices are stay totals.
+export const localizedRu = {
+  ...regular,
+  avgRatingLocalized: '5,0 (200)',
+  structuredDisplayPrice: {
+    __typename: 'StructuredDisplayPrice',
+    displayPriceStyle: 'REGULATED_TOTAL',
+    primaryLine: { __typename: 'QualifiedDisplayPriceLine', accessibilityLabel: '223 € всего', concatQualifierLeft: true, price: '223 €', qualifier: 'Всего' },
+  },
+  title: 'Кондоминиум, Центр',
+};
+
+// Search without dates: every listing is priced for its own dates (5 nights here).
+export const noDatesRu = {
+  ...localizedRu,
+  listingParamOverrides: { __typename: 'ExploreListingParamOverrides', adults: 2, checkin: '2026-10-04', checkout: '2026-10-09', children: 0, infants: 0, pets: 0 },
+  structuredDisplayPrice: {
+    ...localizedRu.structuredDisplayPrice,
+    primaryLine: { ...localizedRu.structuredDisplayPrice.primaryLine, accessibilityLabel: '457 € всего', price: '457 €' },
+  },
+};
+
+// Hotel-style listings: the price fields are spread over orderedComponents.
+export const hotelOrdered = {
+  ...regular,
+  structuredDisplayPrice: {
+    __typename: 'StructuredDisplayPrice',
+    displayPriceStyle: 'REGULATED_TOTAL',
+    primaryLine: {
+      __typename: 'OrderedDisplayPriceLine',
+      accessibilityLabel: '€1,006 total, originally €1,136',
+      orderedComponents: [{ originalPrice: '€1,136' }, { discountedPrice: '€1,006' }, { qualifier: 'total' }],
+    },
+  },
+};

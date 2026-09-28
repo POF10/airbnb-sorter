@@ -38,13 +38,17 @@ export function pageUrl(url, cursor) {
   return result.toString();
 }
 
+// Nights between two YYYY-MM-DD dates; null when missing, invalid or not positive.
+export function nightsBetween(checkin, checkout) {
+  const days = checkin && checkout ? Math.round((Date.parse(checkout) - Date.parse(checkin)) / 86_400_000) : NaN;
+  return days > 0 ? days : null;
+}
+
 // Everything normalizeListing needs to know about the search.
 export function searchContext(searchUrl) {
   const url = new URL(searchUrl);
-  const checkin = url.searchParams.get('checkin');
-  const checkout = url.searchParams.get('checkout');
-  const days = checkin && checkout ? Math.round((Date.parse(checkout) - Date.parse(checkin)) / 86_400_000) : NaN;
-  return { origin: url.origin, searchParams: url.searchParams, nights: days > 0 ? days : null };
+  const nights = nightsBetween(url.searchParams.get('checkin'), url.searchParams.get('checkout'));
+  return { origin: url.origin, searchParams: url.searchParams, nights };
 }
 
 function safeDecode(s) {
