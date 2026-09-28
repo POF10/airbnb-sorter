@@ -54,12 +54,13 @@ export function createOverlay({ L, css, onRefresh, onCancel, onClose }) {
   const errorBox = el('div', 'abs-error');
   let map = null;
   const list = createList({ onHover: id => map?.highlight(id) });
-  list.el.tabIndex = -1; // focus target on open: keys scroll the list instead of re-pressing the launcher
+  list.el.tabIndex = -1; // focused with the results, so keys scroll the list
   const mapBox = el('div', 'abs-map');
   const main = el('main', 'abs-main');
   main.append(list.el, mapBox);
 
   const root = el('div', 'abs-root');
+  root.tabIndex = -1; // focused on open, so keys no longer reach the launcher under the overlay
   root.append(head, progress, errorBox, main);
   shadow.append(style, root);
   document.body.append(host);
@@ -122,7 +123,7 @@ export function createOverlay({ L, css, onRefresh, onCancel, onClose }) {
       savedOverflow = document.documentElement.style.overflow;
       document.documentElement.style.overflow = 'hidden';
       window.addEventListener('keydown', onKey, true);
-      list.el.focus({ preventScroll: true });
+      root.focus({ preventScroll: true });
     },
     close() {
       if (host.style.display === 'none') return;
@@ -146,6 +147,7 @@ export function createOverlay({ L, css, onRefresh, onCancel, onClose }) {
       shownKey = ''; // new data: always re-render, even if the ids are the same
       sub.textContent = describeSearch(meta);
       setMode('results');
+      if (host.style.display !== 'none') list.el.focus({ preventScroll: true });
       map ??= createMap(mapBox, {
         L,
         onMarkerHover: id => list.highlight(id),
