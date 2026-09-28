@@ -57,7 +57,7 @@
 
 - URL-параметры `price_min`, `price_max`, `price_filter_input_type=0` работают.
 - Фильтр — **за ночь**, а показанная цена — **итог за даты с комиссиями** (фильтр €60–70 за ночь → карточки ~€190 за 3 ночи). Для деления по диапазонам это неважно, сортируем по показанной цене.
-- Насыщенность диапазона: `pageCursors.length === 15` ⇒ в диапазоне ≥ 270 объявлений, Airbnb отдаёт не все.
+- Насыщенность диапазона: `pageCursors.length === 15` ⇒ в диапазоне ≥ 253 объявлений, и отличить «ровно 253–270» от «больше 270» нельзя. Такой диапазон делим всегда: иногда это лишние запросы, но без потерь.
 
 ### Фильтры пользователя
 
@@ -67,14 +67,18 @@
 
 ### CSP airbnb.com
 
-`img-src 'self' https: data: blob:` — тайлы OpenStreetMap грузятся. `script-src` ограничен, но Tampermonkey подключает `@require` сам. `connect-src 'self' https:` — same-origin fetch разрешён.
+`img-src 'self' https: data: blob:` — тайлы OpenStreetMap грузятся. `style-src … 'unsafe-inline'` — `<style>` в Shadow DOM и inline-стили разрешены. `script-src` ограничен (сторонние CDN нельзя), но есть `'unsafe-eval'`, а Tampermonkey подключает `@require` сам. `connect-src 'self' https:` — same-origin fetch и fetch с unpkg разрешены. Trusted Types не включены.
 
 ## Архитектура
 
 ```
 airbnb-sorter/
   src/
-    main.js          точка входа userscript: кнопка, SPA-навигация, кэш, связка collector → viewer
+    userscript.js    точка входа Tampermonkey: GM_* → start()
+    main.js          start({ L, leafletCss, storage }): кнопка, кэш, связка collector → viewer
+    launcher.js      плавающая кнопка, видна только на /s/…/homes (опрос URL)
+    cache.js         последний сбор в storage (GM_getValue/GM_setValue или шим)
+    search-url.js    чистка URL, URL диапазона/страницы, контекст поиска, подпись места   (чистый)
     extract.js       HTML → { results, pageCursors, priceFilter: {min, max, histogramTotal} }   (чистый)
     normalize.js     StaySearchResult → Listing                                                (чистый)
     price.js         разбор строк цены                                                         (чистый)
@@ -84,15 +88,19 @@ airbnb-sorter/
       list.js        сетка карточек, подгрузка порциями
       card.js        карточка + карусель фото
       map.js         Leaflet: маркеры-ценники/точки, попапы, подсветка, границы
+      dom.js         мелкие DOM-хелперы
       logic.js       sortListings, filterByBounds, форматирование                             (чистый)
       styles.css     стили слоя (инлайнятся в сборку)
     header.txt       шапка userscript (шаблон, версия подставляется при сборке)
   test/
-    fixtures/        вырезанные JSON-блоки реальных выдач
+    helpers/         синтетический «Airbnb» для тестов сборщика
+    fixtures/        урезанные реальные StaySearchResult
     *.test.js        node:test
   dev/
-    viewer.html      стенд просмотра на фикстурах
-  build.mjs          esbuild → dist/airbnb-sorter.user.js
+    index.html, dev.js, sample-data.js   стенд просмотра на синтетических данных
+    inject.js        запуск без Tampermonkey (шим GM_*, Leaflet через fetch+eval) — для проверки агентом
+  spikes/            спайк Leaflet в Shadow DOM
+  build.mjs          esbuild → dist/airbnb-sorter.user.js и dist/airbnb-sorter.inject.js
 ```
 
 Поток данных: `location.href` → `collector` → `{ listings: Listing[], meta }` → `viewer`.
@@ -133,7 +141,7 @@ airbnb-sorter/
   saturatedRanges,  // число неделимых переполненных диапазонов
   failedPages,      // число страниц, не загруженных после повторов
   partial,          // true при отмене/блокировке/failedPages > 0/saturatedRanges > 0
-  stopReason,       // null | "cancelled" | "blocked" | "error"
+  stopReason,       // null | "cancelled" | "blocked" (сбой первой страницы — исключение, а не stopReason)
 }
 ```
 
@@ -176,7 +184,7 @@ airbnb-sorter/
 ### Кнопка запуска
 
 - Плавающая кнопка «↕ Сортировать все» справа внизу на страницах поиска жилья (`/s/…/homes`).
-- Airbnb — SPA: скрипт отслеживает смену URL (перехват `pushState`/`replaceState` + `popstate`) и показывает/прячет кнопку.
+- Airbnb — SPA: скрипт раз в 500 мс сверяет `location.href` и показывает/прячет кнопку. Перехватить `history.pushState` страницы нельзя — userscript работает в изолированном мире.
 
 ### Кэш
 
@@ -225,7 +233,7 @@ airbnb-sorter/
 
 `npm test` → `node --test`.
 
-- **Фикстуры** (`test/fixtures/`): вырезанный JSON-блок `StaysSearch` из 2–3 реальных выдач — Рига с датами (итоговые цены, есть `DiscountedDisplayPriceLine`, есть `"New"`), выдача без дат (цены за ночь). Лишние поля можно обрезать, структуру путей — нет.
+- **Фикстуры:** `test/fixtures/riga.js` — урезанные реальные `StaySearchResult` из выдачи по Риге (обычный, `DiscountedDisplayPriceLine`, `"New"`, без координат, без id); структура путей сохранена. `test/helpers/fake-airbnb.js` — синтетический Airbnb, который отдаёт HTML страниц поиска и честно учитывает `price_min`/`price_max`/`cursor`, 18 на страницу, максимум 15 страниц. Реальные данные целиком проверяются живой приёмкой.
 - `price.test.js`: `€1,234`, `1 234 €` (неразрывный пробел), `$1,234.50`, `¥12,345`, `₽ 12 345`, мусор → `null`.
 - `extract.test.js`: фикстура в HTML-обёртке → результаты, 15 курсоров, `min/max/histogramTotal`; нет блока / нет `StaysSearch:` → `ExtractError`.
 - `normalize.test.js`: ключевые поля `Listing` на фикстуре; скидка; «New»; отсутствующие координаты; декодирование `id` из base64.
@@ -239,8 +247,8 @@ airbnb-sorter/
 - `npm run build`: esbuild бандлит `src/main.js` в IIFE (ES2020), CSS инлайнится строкой, шапка из `src/header.txt` с версией из `package.json` → `dist/airbnb-sorter.user.js`.
 - Шапка userscript:
   - `@match https://www.airbnb.com/*`; прочие домены Airbnb — `@include` с регуляркой `^https://www\.airbnb\.[a-z.]+/`;
-  - `@require` Leaflet 1.9.4 с cdnjs (с SRI-хэшем);
-  - `@resource leafletCss` — CSS Leaflet с cdnjs, вставляется в Shadow DOM через `GM_getResourceText`;
+  - `@require https://unpkg.com/leaflet@1.9.4/dist/leaflet.js#sha256=20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=` (хэши сверены 2026-09-28);
+  - `@resource leafletCss https://unpkg.com/leaflet@1.9.4/dist/leaflet.css#sha256=p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=` — вставляется в Shadow DOM через `GM_getResourceText`;
   - `@grant GM_getValue`, `GM_setValue`, `GM_getResourceText`;
   - `@run-at document-idle`, `@noframes`.
 - Установка: Tampermonkey в Chrome → в настройках расширения включить «Allow User Scripts» → открыть `dist/airbnb-sorter.user.js` → Install. Обновление — пересобрать и переустановить.
