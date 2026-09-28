@@ -38,6 +38,31 @@ test('multi-letter currency', () => {
   assert.deepEqual(parsePrice('CA$1,234'), { amount: 1234, currency: 'CA$' });
 });
 
+test('European mixed separators', () => {
+  assert.deepEqual(parsePrice('1.234,56 €'), { amount: 1234.56, currency: '€' });
+});
+
+test('Indian grouping', () => {
+  assert.deepEqual(parsePrice('₹1,23,456'), { amount: 123456, currency: '₹' });
+});
+
+test('apostrophe thousands separators (Swiss)', () => {
+  assert.deepEqual(parsePrice("CHF 1'234"), { amount: 1234, currency: 'CHF' });
+  assert.deepEqual(parsePrice('CHF 1\u2019234'), { amount: 1234, currency: 'CHF' });
+});
+
+test('bidi marks are not part of the currency', () => {
+  assert.deepEqual(parsePrice('\u200f1,234 SAR\u200f'), { amount: 1234, currency: 'SAR' });
+});
+
+test('no currency', () => {
+  assert.deepEqual(parsePrice('1234'), { amount: 1234, currency: null });
+});
+
+test('an unknown number format gives null, not a wrong amount', () => {
+  assert.equal(parsePrice('€1\u066c234'), null); // Arabic thousands separator
+});
+
 test('garbage and empty input', () => {
   assert.equal(parsePrice('free'), null);
   assert.equal(parsePrice(''), null);
