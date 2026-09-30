@@ -2,8 +2,17 @@
   "name": "airbnb-sorter",
   "version": "0.1.0",
   "private": true,
+  "description": "Tampermonkey userscript: collects a whole Airbnb search (past the 270-listing cap) and shows it sortable by price, with photos and a map",
+  "author": "POF10",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/POF10/airbnb-sorter.git"
+  },
   "type": "module",
-  "description": "Userscript: collects the whole Airbnb search and shows it sortable by price",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "node build.mjs",
     "dev": "node build.mjs --dev",

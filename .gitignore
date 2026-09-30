@@ -1,3 +1,4 @@
 node_modules/
-dist/
+dist/*
+!dist/airbnb-sorter.user.js
 dev/dev.bundle.js
