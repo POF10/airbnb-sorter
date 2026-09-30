@@ -27,7 +27,7 @@ Userscript для Tampermonkey, который добавляет в поиск 
    3. Включите переключатель **«Разрешить пользовательские скрипты»** (Allow User Scripts). Если такого переключателя нет, у вас старая версия браузера: включите вместо этого **«Режим разработчика»** в правом верхнем углу той же страницы.
 3. **Установите скрипт.** Откройте ссылку:
 
-   **[Установить Airbnb Sorter](https://github.com/POF10/airbnb-sorter/releases/latest/download/airbnb-sorter.user.js)**
+   **[Установить Airbnb Sorter](https://raw.githubusercontent.com/POF10/airbnb-sorter/main/dist/airbnb-sorter.user.js)**
 
    Tampermonkey откроет страницу с описанием скрипта. Нажмите **«Установить»**. Всё: скрипт установлен, а обновления Tampermonkey будет подтягивать сам.
 
@@ -95,7 +95,7 @@ npm run build   # dist/airbnb-sorter.user.js и dist/airbnb-sorter.inject.js
 | `src/launcher.js`, `src/main.js` | кнопка на странице и связка всего вместе |
 | `src/userscript.js`, `dev/inject.js` | точки входа для Tampermonkey и для запуска без него |
 
-Выпуск версии: поднять `version` в `package.json`, выполнить `npm run build` и приложить `dist/airbnb-sorter.user.js` к релизу на GitHub с именем `v<версия>`. Установленные копии обновятся сами с последнего релиза.
+Выпуск версии: поднять `version` в `package.json`, выполнить `npm run build`, закоммитить пересобранный `dist/airbnb-sorter.user.js` (это адрес установки и автообновления) и приложить его к релизу на GitHub с именем `v<версия>`. Установленные копии обновятся сами из этого файла.
 
 Требуется Node.js 22+.
 

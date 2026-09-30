@@ -7,8 +7,8 @@
 // @author       POF10
 // @homepageURL  https://github.com/POF10/airbnb-sorter
 // @supportURL   https://github.com/POF10/airbnb-sorter/issues
-// @downloadURL  https://github.com/POF10/airbnb-sorter/releases/latest/download/airbnb-sorter.user.js
-// @updateURL    https://github.com/POF10/airbnb-sorter/releases/latest/download/airbnb-sorter.user.js
+// @downloadURL  https://raw.githubusercontent.com/POF10/airbnb-sorter/main/dist/airbnb-sorter.user.js
+// @updateURL    https://raw.githubusercontent.com/POF10/airbnb-sorter/main/dist/airbnb-sorter.user.js
 // @match        https://www.airbnb.com/*
 // @include      /^https:\/\/[a-z][a-z-]*\.airbnb\.(?:[a-z]{2,3}|com?\.[a-z]{2})\//
 // @require      https://unpkg.com/leaflet@1.9.4/dist/leaflet.js#sha256=20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=

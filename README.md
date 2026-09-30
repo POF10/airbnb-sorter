@@ -27,7 +27,7 @@ Step by step, no technical knowledge needed. Takes about two minutes.
    3. Turn on **Allow User Scripts**. If there is no such switch, your browser is older: turn on **Developer mode** in the top-right corner of the same page instead.
 3. **Install the script.** Open this link:
 
-   **[Install Airbnb Sorter](https://github.com/POF10/airbnb-sorter/releases/latest/download/airbnb-sorter.user.js)**
+   **[Install Airbnb Sorter](https://raw.githubusercontent.com/POF10/airbnb-sorter/main/dist/airbnb-sorter.user.js)**
 
    Tampermonkey opens a page describing the script. Click **Install**. That's it: the script is installed, and Tampermonkey will update it automatically when a new version comes out.
 
@@ -95,7 +95,7 @@ Layout:
 | `src/launcher.js`, `src/main.js` | the on-page button and the wiring |
 | `src/userscript.js`, `dev/inject.js` | entry points for Tampermonkey and for running without it |
 
-Releasing: bump `version` in `package.json`, `npm run build`, then attach `dist/airbnb-sorter.user.js` to a GitHub release named `v<version>`. Installed copies update themselves from the latest release.
+Releasing: bump `version` in `package.json`, `npm run build`, commit the rebuilt `dist/airbnb-sorter.user.js` (it is the install/update URL) and attach it to a GitHub release named `v<version>`. Installed copies update themselves from that file.
 
 Requires Node.js 22+.
 
