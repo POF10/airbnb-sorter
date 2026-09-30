@@ -1,9 +1,11 @@
 // Viewer dev stand: the overlay on synthetic data, no Airbnb involved. Run `npm run dev`.
 import { createOverlay } from '../src/viewer/overlay.js';
 import css from '../src/viewer/styles.css';
+import { setLocale, detectLocale } from '../src/i18n.js';
 import { sampleCollection } from './sample-data.js';
 
 (async () => {
+  setLocale(detectLocale({ pageLang: new URLSearchParams(location.search).get('lang') ?? '', browserLang: navigator.language }));
   const leafletCss = await fetch('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css').then(r => r.text());
   let timer = null;
   const overlay = createOverlay({

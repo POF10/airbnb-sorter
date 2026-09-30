@@ -32,6 +32,6 @@ export function saveCache(storage, searchUrl, { listings, meta }) {
   try {
     storage.set(KEY, { v: VERSION, key: cacheKey(searchUrl), listings: trimmed, meta });
   } catch (e) {
-    console.warn('[airbnb-sorter] не удалось сохранить кэш', e);
+    console.warn('[airbnb-sorter] could not save the cache', e);
   }
 }

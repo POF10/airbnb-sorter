@@ -4,6 +4,7 @@ import { loadCache, saveCache } from './cache.js';
 import { createLauncher } from './launcher.js';
 import { createOverlay } from './viewer/overlay.js';
 import { describeSearch } from './viewer/logic.js';
+import { setLocale, detectLocale } from './i18n.js';
 import css from './viewer/styles.css';
 
 async function fetchPage(url, signal) {
@@ -14,6 +15,7 @@ async function fetchPage(url, signal) {
 
 // env: { L: Leaflet global, leafletCss: string, storage: { get(key, fallback), set(key, value) } }
 export function start({ L, leafletCss, storage }) {
+  setLocale(detectLocale({ pageLang: document.documentElement.lang, browserLang: navigator.language }));
   let overlay = null;
   let controller = null;
   let running = false;
@@ -43,7 +45,7 @@ export function start({ L, leafletCss, storage }) {
         view.showResults(cached, { fromCache: true });
         return;
       } catch (e) {
-        console.warn('[airbnb-sorter] кэш не отображается, собираю заново', e);
+        console.warn('[airbnb-sorter] cached result failed to render, collecting afresh', e);
       }
     }
 

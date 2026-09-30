@@ -1,6 +1,5 @@
 node_modules/
-dist/*
-!dist/airbnb-sorter.user.js
+dist/
 dev/dev.bundle.js
 docs/superpowers/plans/
 spikes/

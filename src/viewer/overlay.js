@@ -4,6 +4,7 @@ import { createMap } from './map.js';
 import {
   SORTS, DEFAULT_SORT, sortListings, filterByBounds, describeSearch, summaryText, partialReasons, progressText,
 } from './logic.js';
+import { t } from '../i18n.js';
 
 // Full-screen layer in a Shadow DOM. Knows nothing about Airbnb: renders { listings, meta } and reports
 // user intents. L — Leaflet global; css — Leaflet CSS + styles.css.
@@ -36,11 +37,11 @@ export function createOverlay({ L, css, onRefresh, onCancel, onClose }) {
   const areaBox = el('input');
   areaBox.type = 'checkbox';
   const areaLabel = el('label', 'abs-toggle');
-  areaLabel.append(areaBox, 'Только в области карты');
-  const refreshBtn = button('⟳ Обновить', 'abs-btn');
-  const viewBtn = button('Карта', 'abs-btn abs-only-narrow');
+  areaLabel.append(areaBox, t().onlyInMap);
+  const refreshBtn = button(t().refresh, 'abs-btn');
+  const viewBtn = button(t().showMap, 'abs-btn abs-only-narrow');
   const closeBtn = button('×', 'abs-close');
-  closeBtn.title = 'Закрыть (Esc)';
+  closeBtn.title = t().close;
   const controls = el('div', 'abs-controls');
   controls.append(sortSelect, areaLabel, refreshBtn, viewBtn, closeBtn);
   const head = el('header', 'abs-head');
@@ -48,7 +49,7 @@ export function createOverlay({ L, css, onRefresh, onCancel, onClose }) {
 
   // Body: progress | error | results
   const progressLabel = el('div');
-  const cancelBtn = button('Отмена', 'abs-btn');
+  const cancelBtn = button(t().cancel, 'abs-btn');
   const progress = el('div', 'abs-progress');
   progress.append(el('div', 'abs-spinner'), progressLabel, cancelBtn);
   const errorBox = el('div', 'abs-error');
@@ -93,7 +94,7 @@ export function createOverlay({ L, css, onRefresh, onCancel, onClose }) {
     summary.textContent = summaryText(state.meta, state.listings.length, state.onlyInMap ? shown.length : null, { fromCache: state.fromCache });
     const reasons = state.meta.partial ? partialReasons(state.meta) : [];
     warn.hidden = reasons.length === 0;
-    warn.title = `Неполный сбор: ${reasons.join('; ')}`;
+    warn.title = t().partial(reasons.join('; '));
   }
 
   sortSelect.addEventListener('change', () => { state.sortId = sortSelect.value; render(); });
@@ -103,7 +104,7 @@ export function createOverlay({ L, css, onRefresh, onCancel, onClose }) {
   closeBtn.addEventListener('click', () => api.close());
   viewBtn.addEventListener('click', () => {
     const showMap = main.classList.toggle('abs-main--map');
-    viewBtn.textContent = showMap ? 'Список' : 'Карта';
+    viewBtn.textContent = showMap ? t().showList : t().showMap;
     if (showMap && map) {
       map.invalidateSize();
       map.fitAll();
@@ -140,7 +141,7 @@ export function createOverlay({ L, css, onRefresh, onCancel, onClose }) {
     },
     showError(message) {
       setMode('error');
-      errorBox.textContent = `Не удалось собрать выдачу: ${message}`;
+      errorBox.textContent = t().collectFailed(message);
     },
     showResults({ listings, meta }, { fromCache = false } = {}) {
       Object.assign(state, { listings, meta, fromCache });

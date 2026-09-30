@@ -61,7 +61,7 @@ export function splitRange({ lo, hi }, priceMax) {
 /**
  * Collects every listing of the Airbnb search at `href`.
  * fetchPage(url, signal) -> Promise<html>; must throw HttpError for non-2xx responses.
- * Returns { listings, meta } (spec "Модель данных"); rejects when the very first page fails.
+ * Returns { listings, meta } (spec "Data model"); rejects when the very first page fails.
  * maxRequests overrides the request budget (see MIN_BUDGET).
  */
 export async function collect(href, {

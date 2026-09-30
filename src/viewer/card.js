@@ -1,5 +1,6 @@
 import { el, button } from './dom.js';
 import { formatMoney, formatRating, photoUrl } from './logic.js';
+import { t } from '../i18n.js';
 
 const MAX_DOTS = 5;
 
@@ -28,8 +29,8 @@ function createCarousel(listing) {
     };
     const prev = button('‹', 'abs-nav abs-nav--prev');
     const next = button('›', 'abs-nav abs-nav--next');
-    prev.setAttribute('aria-label', 'Предыдущее фото');
-    next.setAttribute('aria-label', 'Следующее фото');
+    prev.setAttribute('aria-label', t().prevPhoto);
+    next.setAttribute('aria-label', t().nextPhoto);
     for (const [btn, step] of [[prev, -1], [next, 1]]) {
       btn.addEventListener('click', e => {
         e.preventDefault();
@@ -57,7 +58,7 @@ function createBody(listing) {
   price.append(el('b', null, formatMoney(amount, currency)));
   if (qualifier) price.append(` ${qualifier}`);
   if (listing.pricePerNight != null) {
-    price.append(el('span', 'abs-muted', ` · ≈ ${formatMoney(listing.pricePerNight, currency)}/ночь`));
+    price.append(el('span', 'abs-muted', ` · ≈ ${formatMoney(listing.pricePerNight, currency)}${t().perNight}`));
   }
   body.append(price);
   return body;

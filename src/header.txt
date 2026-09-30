@@ -2,12 +2,13 @@
 // @name         Airbnb Sorter
 // @namespace    airbnb-sorter.local
 // @version      {{version}}
-// @description  Собирает всю выдачу поиска Airbnb и показывает её с сортировкой по цене, фото и картой
+// @description  Collects a whole Airbnb search (past the 270-listing cap) and shows it sortable by price, with photos and a map
+// @description:ru Собирает всю выдачу поиска Airbnb (а не только 270 объявлений) и показывает её с сортировкой по цене, фото и картой
 // @author       POF10
 // @homepageURL  https://github.com/POF10/airbnb-sorter
 // @supportURL   https://github.com/POF10/airbnb-sorter/issues
-// @downloadURL  https://raw.githubusercontent.com/POF10/airbnb-sorter/main/dist/airbnb-sorter.user.js
-// @updateURL    https://raw.githubusercontent.com/POF10/airbnb-sorter/main/dist/airbnb-sorter.user.js
+// @downloadURL  https://github.com/POF10/airbnb-sorter/releases/latest/download/airbnb-sorter.user.js
+// @updateURL    https://github.com/POF10/airbnb-sorter/releases/latest/download/airbnb-sorter.user.js
 // @match        https://www.airbnb.com/*
 // @include      /^https:\/\/[a-z][a-z-]*\.airbnb\.(?:[a-z]{2,3}|com?\.[a-z]{2})\//
 // @require      https://unpkg.com/leaflet@1.9.4/dist/leaflet.js#sha256=20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=

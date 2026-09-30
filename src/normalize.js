@@ -66,7 +66,7 @@ function isTotalPrice(raw, price) {
   return /TOTAL/.test(raw.structuredDisplayPrice?.displayPriceStyle ?? '') || price.qualifier === 'total';
 }
 
-// StaySearchResult -> Listing (spec "Модель данных"); null when the id is missing. ctx = searchContext(searchUrl).
+// StaySearchResult -> Listing (spec "Data model"); null when the id is missing. ctx = searchContext(searchUrl).
 export function normalizeListing(raw, ctx) {
   const id = decodeListingId(raw?.demandStayListing?.id);
   if (!id) return null;

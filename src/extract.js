@@ -34,26 +34,26 @@ export function extractSearchPage(html) {
     return parseSearchPage(html);
   } catch (e) {
     if (e instanceof ExtractError) throw e;
-    throw new ExtractError(`неожиданная структура страницы: ${e.message}`);
+    throw new ExtractError(`unexpected page structure: ${e.message}`);
   }
 }
 
 function parseSearchPage(html) {
   const m = STATE_RE.exec(html);
-  if (!m) throw new ExtractError('нет <script id="data-deferred-state-0">');
+  if (!m) throw new ExtractError('no <script id="data-deferred-state-0">');
   let state;
   try {
     state = JSON.parse(m[1]);
   } catch {
-    throw new ExtractError('data-deferred-state-0: невалидный JSON');
+    throw new ExtractError('data-deferred-state-0: invalid JSON');
   }
   const entries = state?.niobeClientData;
-  if (!Array.isArray(entries)) throw new ExtractError('нет niobeClientData');
+  if (!Array.isArray(entries)) throw new ExtractError('no niobeClientData');
   const entry = entries.find(e => Array.isArray(e) && typeof e[0] === 'string' && e[0].startsWith('StaysSearch:'));
-  if (!entry) throw new ExtractError('нет записи StaysSearch: в niobeClientData');
+  if (!entry) throw new ExtractError('no StaysSearch: entry in niobeClientData');
   const results = entry[1]?.data?.presentation?.staysSearch?.results;
-  if (!results) throw new ExtractError('нет …staysSearch.results');
-  if (!Array.isArray(results.searchResults)) throw new ExtractError('нет …staysSearch.results.searchResults');
+  if (!results) throw new ExtractError('no …staysSearch.results');
+  if (!Array.isArray(results.searchResults)) throw new ExtractError('no …staysSearch.results.searchResults');
   const cursors = results.paginationInfo?.pageCursors;
   return {
     results: results.searchResults,

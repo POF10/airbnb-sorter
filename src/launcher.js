@@ -1,4 +1,5 @@
 import { isHomesSearchPath } from './search-url.js';
+import { t } from './i18n.js';
 
 const STYLE = [
   'all:initial', 'position:fixed', 'right:24px', 'bottom:24px', 'z-index:2147483646',
@@ -12,7 +13,7 @@ const STYLE = [
 export function createLauncher(onClick) {
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.textContent = '↕ Сортировать все';
+  btn.textContent = t().launcher;
   btn.setAttribute('style', STYLE);
   btn.addEventListener('click', () => {
     btn.blur(); // otherwise Space/Enter under the overlay would press it again

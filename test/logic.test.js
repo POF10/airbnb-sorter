@@ -4,6 +4,9 @@ import {
   SORTS, DEFAULT_SORT, sortListings, filterByBounds, formatMoney, formatRating, photoUrl,
   describeSearch, formatAge, summaryText, partialReasons, progressText,
 } from '../src/viewer/logic.js';
+import { setLocale } from '../src/i18n.js';
+
+setLocale('ru'); // the assertions below are the Russian texts
 
 const make = (id, amount, rating = null, reviews = null, lat = 56.95, lng = 24.1) => ({ id, price: { amount }, rating, reviews, lat, lng });
 const ids = list => list.map(l => l.id);

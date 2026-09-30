@@ -1,11 +1,12 @@
-// Pure viewer logic: sorting, map-area filtering and all user-visible texts.
+// Pure viewer logic: sorting, map-area filtering and all user-visible texts (via i18n).
+import { t } from '../i18n.js';
 
-// `then` breaks ties (descending): among equal 5.0 ratings, more reviews first.
+// `then` breaks ties (descending): among equal 5.0 ratings, more reviews first. Labels follow the current language.
 export const SORTS = {
-  'price-desc': { label: 'Цена ↓', key: l => l.price.amount, dir: -1 },
-  'price-asc': { label: 'Цена ↑', key: l => l.price.amount, dir: 1 },
-  'rating-desc': { label: 'Рейтинг ↓', key: l => l.rating, dir: -1, then: l => l.reviews },
-  'reviews-desc': { label: 'Отзывов ↓', key: l => l.reviews, dir: -1, then: l => l.rating },
+  'price-desc': { get label() { return t().sort['price-desc']; }, key: l => l.price.amount, dir: -1 },
+  'price-asc': { get label() { return t().sort['price-asc']; }, key: l => l.price.amount, dir: 1 },
+  'rating-desc': { get label() { return t().sort['rating-desc']; }, key: l => l.rating, dir: -1, then: l => l.reviews },
+  'reviews-desc': { get label() { return t().sort['reviews-desc']; }, key: l => l.reviews, dir: -1, then: l => l.rating },
 };
 export const DEFAULT_SORT = 'price-desc';
 
@@ -31,18 +32,27 @@ export function filterByBounds(listings, { south, west, north, east }) {
   return listings.filter(l => l.lat != null && l.lng != null && l.lat >= south && l.lat <= north && l.lng >= west && l.lng <= east);
 }
 
-const numberFormat = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 });
-const count = n => numberFormat.format(n);
+const formatters = new Map();
+function formatter(kind) {
+  const key = `${kind}:${t().numberLocale}`;
+  if (!formatters.has(key)) {
+    formatters.set(key, kind === 'number'
+      ? new Intl.NumberFormat(t().numberLocale, { maximumFractionDigits: 0 })
+      : new Intl.DateTimeFormat(t().dateLocale, { day: 'numeric', month: 'short', timeZone: 'UTC' }));
+  }
+  return formatters.get(key);
+}
+const count = n => formatter('number').format(n);
 
 // Symbols stick to the number ("€1 234"), letter codes get a no-break space ("CHF 1 234").
 export function formatMoney(amount, currency) {
   if (amount == null) return '—';
   const gap = /\p{L}$/u.test(currency ?? '') ? '\u00a0' : '';
-  return `${currency ?? ''}${gap}${numberFormat.format(amount)}`;
+  return `${currency ?? ''}${gap}${count(amount)}`;
 }
 
 export function formatRating({ rating, reviews }) {
-  if (rating == null) return '★ Новое';
+  if (rating == null) return t().newRating;
   const value = Number.isInteger(rating) ? rating.toFixed(1) : String(rating);
   return reviews != null ? `★ ${value} (${reviews})` : `★ ${value}`;
 }
@@ -59,60 +69,50 @@ export function photoUrl(url, width = 720) {
   }
 }
 
-function plural(n, one, few, many) {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return one;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
-  return many;
-}
-
-const dayMonth = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-
-// "Riga, Latvia · 16 окт. – 19 окт. · 2 гостя"
+// "Riga, Latvia · 16 Oct – 19 Oct · 2 guests"
 export function describeSearch({ placeLabel, searchUrl }) {
   const params = new URL(searchUrl).searchParams;
   const parts = [placeLabel];
-  const checkin = params.get('checkin');
-  const checkout = params.get('checkout');
-  const from = new Date(checkin ?? '');
-  const to = new Date(checkout ?? '');
-  if (!Number.isNaN(from.getTime()) && !Number.isNaN(to.getTime())) parts.push(`${dayMonth.format(from)} – ${dayMonth.format(to)}`);
+  const from = new Date(params.get('checkin') ?? '');
+  const to = new Date(params.get('checkout') ?? '');
+  if (!Number.isNaN(from.getTime()) && !Number.isNaN(to.getTime())) {
+    parts.push(`${formatter('date').format(from)} – ${formatter('date').format(to)}`);
+  }
   const guests = Number(params.get('adults') || 0) + Number(params.get('children') || 0);
-  if (guests) parts.push(`${guests} ${plural(guests, 'гость', 'гостя', 'гостей')}`);
+  if (guests) parts.push(t().guests(guests));
   return parts.filter(Boolean).join(' · ');
 }
 
 export function formatAge(iso, now = Date.now()) {
   const minutes = Math.floor((now - Date.parse(iso)) / 60_000);
-  if (minutes < 1) return 'только что';
-  if (minutes < 60) return `${minutes} мин назад`;
+  if (minutes < 1) return t().justNow;
+  if (minutes < 60) return t().minutesAgo(minutes);
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} ч назад`;
-  return `${Math.floor(hours / 24)} дн назад`;
+  if (hours < 24) return t().hoursAgo(hours);
+  return t().daysAgo(Math.floor(hours / 24));
 }
 
-// "Собрано 1 240 из ~1 263 · показано 84 · 12 мин назад"
+// "Collected 1,240 of ~1,263 · showing 84 · 12 min ago"
 export function summaryText(meta, total, shown = null, { fromCache = false, now = Date.now() } = {}) {
-  let text = `Собрано ${count(total)}`;
-  if (meta.expectedTotal) text += ` из ~${count(meta.expectedTotal)}`;
-  if (shown != null) text += ` · показано ${count(shown)}`;
+  let text = t().collected(count(total));
+  if (meta.expectedTotal) text += t().ofExpected(count(meta.expectedTotal));
+  if (shown != null) text += t().showing(count(shown));
   if (fromCache) text += ` · ${formatAge(meta.collectedAt, now)}`;
   return text;
 }
 
 export function partialReasons(meta) {
   const reasons = [];
-  if (meta.stopReason === 'cancelled') reasons.push('сбор отменён');
-  if (meta.stopReason === 'blocked') reasons.push('Airbnb начал блокировать запросы');
-  if (meta.stopReason === 'limit') reasons.push('достигнут предел числа запросов');
-  if (meta.failedPages) reasons.push(`не загрузилось страниц: ${meta.failedPages}`);
-  if (meta.saturatedRanges) reasons.push(`переполненных ценовых диапазонов: ${meta.saturatedRanges} (часть объявлений недоступна)`);
+  if (meta.stopReason === 'cancelled') reasons.push(t().cancelled);
+  if (meta.stopReason === 'blocked') reasons.push(t().blocked);
+  if (meta.stopReason === 'limit') reasons.push(t().limit);
+  if (meta.failedPages) reasons.push(t().failedPages(meta.failedPages));
+  if (meta.saturatedRanges) reasons.push(t().saturated(meta.saturatedRanges));
   return reasons;
 }
 
 export function progressText(p) {
-  if (!p) return 'Загружаю первую страницу…';
-  const of = p.expectedTotal ? ` из ~${count(p.expectedTotal)}` : '';
-  return `Диапазонов: ${p.ranges} · Страниц: ${p.pagesDone} / ~${p.pagesPlanned} · Объявлений: ${count(p.listings)}${of}`;
+  if (!p) return t().loadingFirst;
+  const of = p.expectedTotal ? t().ofExpected(count(p.expectedTotal)) : '';
+  return t().progress({ ...p, listings: count(p.listings) }, of);
 }
