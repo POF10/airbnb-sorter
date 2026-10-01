@@ -1,4 +1,5 @@
-// Keeps only the last collection. storage: { get(key, fallback), set(key, value) } — GM_getValue/GM_setValue or a shim.
+// Keeps only the last collection. storage: { get(key, fallback), set(key, value) }, sync or async —
+// GM_getValue/GM_setValue, a localStorage shim or chrome.storage.local.
 const KEY = 'lastCollection';
 // Bump when the Listing shape changes, so an old cache is ignored instead of breaking the viewer.
 const VERSION = 1;
@@ -15,9 +16,9 @@ export function cacheKey(searchUrl) {
   return url.toString();
 }
 
-export function loadCache(storage, searchUrl) {
+export async function loadCache(storage, searchUrl) {
   try {
-    const cached = storage.get(KEY, null);
+    const cached = await storage.get(KEY, null);
     const valid = cached && cached.v === VERSION && Array.isArray(cached.listings) && typeof cached.meta?.searchUrl === 'string';
     return valid && cached.key === cacheKey(searchUrl)
       ? { listings: cached.listings, meta: cached.meta }
@@ -27,10 +28,10 @@ export function loadCache(storage, searchUrl) {
   }
 }
 
-export function saveCache(storage, searchUrl, { listings, meta }) {
+export async function saveCache(storage, searchUrl, { listings, meta }) {
   const trimmed = listings.map(l => (l.photos?.length > MAX_PHOTOS ? { ...l, photos: l.photos.slice(0, MAX_PHOTOS) } : l));
   try {
-    storage.set(KEY, { v: VERSION, key: cacheKey(searchUrl), listings: trimmed, meta });
+    await storage.set(KEY, { v: VERSION, key: cacheKey(searchUrl), listings: trimmed, meta });
   } catch (e) {
     console.warn('[airbnb-sorter] could not save the cache', e);
   }

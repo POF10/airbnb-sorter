@@ -13,7 +13,7 @@ async function fetchPage(url, signal) {
   return response.text();
 }
 
-// env: { L: Leaflet global, leafletCss: string, storage: { get(key, fallback), set(key, value) } }
+// env: { L: Leaflet global, leafletCss: string, storage: { get(key, fallback), set(key, value) } — sync or async }
 export function start({ L, leafletCss, storage }) {
   setLocale(detectLocale({ pageLang: document.documentElement.lang, browserLang: navigator.language }));
   let overlay = null;
@@ -39,7 +39,8 @@ export function start({ L, leafletCss, storage }) {
     controller?.abort();
     const current = (controller = new AbortController());
 
-    const cached = force ? null : loadCache(storage, searchUrl);
+    const cached = force ? null : await loadCache(storage, searchUrl);
+    if (current !== controller) return; // another click took over while the cache was being read
     if (cached) {
       try {
         view.showResults(cached, { fromCache: true });
@@ -68,7 +69,7 @@ export function start({ L, leafletCss, storage }) {
     }
     if (current !== controller) return;
     // A cancelled run is shown but not cached, so the next click collects afresh.
-    if (result.meta.stopReason !== 'cancelled') saveCache(storage, searchUrl, result);
+    if (result.meta.stopReason !== 'cancelled') void saveCache(storage, searchUrl, result);
     view.showResults(result);
   }
 
