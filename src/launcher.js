@@ -8,8 +8,9 @@ const STYLE = [
   'box-shadow:0 4px 12px rgba(0,0,0,.25)',
 ].join(';');
 
-// Floating launch button, visible only on homes search pages. Airbnb is a SPA and the userscript runs
+// Floating launch button, visible only on homes search pages. Airbnb is a SPA and the script runs
 // in an isolated world (it can't hook the page's history.pushState), so the URL is polled.
+// Returns { refreshLabel() } to re-read the button text after a language change.
 export function createLauncher(onClick) {
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -29,5 +30,9 @@ export function createLauncher(onClick) {
   };
   sync();
   setInterval(sync, 500);
-  return btn;
+  return {
+    refreshLabel() {
+      btn.textContent = t().launcher;
+    },
+  };
 }

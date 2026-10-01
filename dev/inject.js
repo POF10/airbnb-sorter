@@ -1,6 +1,7 @@
 // Runs the userscript without Tampermonkey: evaluate dist/airbnb-sorter.inject.js in an Airbnb tab
 // (DevTools console or an agent's browser JS tool). Storage goes to localStorage.
 import { start } from '../src/main.js';
+import { isPageClaimed } from '../src/guard.js';
 
 const LEAFLET = 'https://unpkg.com/leaflet@1.9.4/dist/';
 // Same SRI hashes as the userscript header (src/header.txt): the code is evaluated with the user's session.
@@ -20,8 +21,8 @@ async function fetchVerified(file) {
 }
 
 (async () => {
-  if (window.__airbnbSorter) return console.log('[airbnb-sorter] already injected');
-  window.__airbnbSorter = true;
+  // Checked before Leaflet is downloaded; start() makes the actual claim.
+  if (isPageClaimed(document)) return console.log('[airbnb-sorter] already running on this page');
   const [js, leafletCss] = await Promise.all(['leaflet.js', 'leaflet.css'].map(fetchVerified));
   if (!globalThis.L) {
     // Hide AMD loaders so Leaflet's UMD wrapper defines window.L.
@@ -29,7 +30,7 @@ async function fetchVerified(file) {
     globalThis.define = undefined;
     try { (0, eval)(js); } finally { globalThis.define = define; }
   }
-  start({
+  const started = await start({
     L: globalThis.L,
     leafletCss,
     storage: {
@@ -42,5 +43,5 @@ async function fetchVerified(file) {
       },
     },
   });
-  console.log('[airbnb-sorter] injected');
+  console.log(started ? '[airbnb-sorter] injected' : '[airbnb-sorter] already running on this page');
 })();

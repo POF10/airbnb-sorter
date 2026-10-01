@@ -1,6 +1,9 @@
 import { collect, HttpError } from './collector.js';
 import { parseSearchUrl, placeLabel } from './search-url.js';
 import { loadCache, saveCache } from './cache.js';
+import { loadSettings, saveSettings, resolveLocale } from './settings.js';
+import { claimPage } from './guard.js';
+import { SUPPORT_LINKS } from './config.js';
 import { createLauncher } from './launcher.js';
 import { createOverlay } from './viewer/overlay.js';
 import { describeSearch } from './viewer/logic.js';
@@ -13,20 +16,51 @@ async function fetchPage(url, signal) {
   return response.text();
 }
 
-// env: { L: Leaflet global, leafletCss: string, storage: { get(key, fallback), set(key, value) } — sync or async }
-export function start({ L, leafletCss, storage }) {
-  setLocale(detectLocale({ pageLang: document.documentElement.lang, browserLang: navigator.language }));
+// env: {
+//   L: Leaflet, leafletCss: string,
+//   storage: { get(key, fallback), set(key, value) } — sync or async,
+//   onSettingsChange?: register a callback for settings changed elsewhere (the extension popup, another tab)
+// }
+// Resolves to false when another copy (userscript, extension, console build) already runs on the page.
+export async function start({ L, leafletCss, storage, onSettingsChange }) {
+  if (!claimPage(document)) return false;
+
+  let settings = await loadSettings(storage);
+  const applyLocale = () => setLocale(resolveLocale(
+    settings.language,
+    () => detectLocale({ pageLang: document.documentElement.lang, browserLang: navigator.language }),
+  ));
+  applyLocale();
+
   let overlay = null;
+  let overlayStale = false; // built in a language that is no longer current
   let controller = null;
   let running = false;
 
-  const getOverlay = () => (overlay ??= createOverlay({
-    L,
-    css: `${leafletCss}\n${css}`,
-    onRefresh: () => run(true),
-    onCancel: () => controller?.abort(),
-    onClose: () => controller?.abort(),
-  }));
+  function getOverlay() {
+    // Texts are set when the overlay is built, so a language change rebuilds it — but never under the user's hands.
+    if (overlay && overlayStale && !running && !overlay.isOpen()) {
+      overlay.destroy();
+      overlay = null;
+    }
+    if (!overlay) {
+      overlayStale = false;
+      overlay = createOverlay({
+        L,
+        css: `${leafletCss}\n${css}`,
+        initialSort: settings.sort,
+        supportUrl: SUPPORT_LINKS[0]?.url,
+        onSortChange: sort => {
+          settings = { ...settings, sort };
+          void saveSettings(storage, { sort });
+        },
+        onRefresh: () => run(true),
+        onCancel: () => controller?.abort(),
+        onClose: () => controller?.abort(),
+      });
+    }
+    return overlay;
+  }
 
   async function run(force) {
     const view = getOverlay();
@@ -73,5 +107,15 @@ export function start({ L, leafletCss, storage }) {
     view.showResults(result);
   }
 
-  createLauncher(() => run(false));
+  const launcher = createLauncher(() => run(false));
+
+  onSettingsChange?.(async () => {
+    const previous = settings.language;
+    settings = await loadSettings(storage);
+    if (settings.language === previous) return;
+    applyLocale();
+    launcher.refreshLabel();
+    overlayStale = true;
+  });
+  return true;
 }
