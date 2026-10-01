@@ -1130,6 +1130,7 @@
       destroy() {
         api.close();
         map?.remove();
+        map = null;
         list3.destroy();
         host.remove();
       },
@@ -1183,6 +1184,7 @@
     applyLocale();
     let overlay = null;
     let overlayLocale = null;
+    let shownKey = null;
     let controller = null;
     let running = false;
     function getOverlay() {
@@ -1192,6 +1194,7 @@
       }
       if (!overlay) {
         overlayLocale = getLocale();
+        shownKey = null;
         overlay = createOverlay({
           L,
           css: `${leafletCss}
@@ -1217,7 +1220,12 @@ ${styles_default}`,
       const { searchUrl } = parseSearchUrl(href);
       controller?.abort();
       const current = controller = new AbortController();
-      view.showProgress(null, describeSearch({ placeLabel: placeLabel(searchUrl), searchUrl }));
+      const key = cacheKey(searchUrl);
+      const title = describeSearch({ placeLabel: placeLabel(searchUrl), searchUrl });
+      if (force || shownKey !== key) {
+        shownKey = null;
+        view.showProgress(null, title);
+      }
       const cached = force ? null : await loadCache(storage, searchUrl);
       if (current !== controller) return;
       if (current.signal.aborted) {
@@ -1227,12 +1235,15 @@ ${styles_default}`,
       if (cached) {
         try {
           view.showResults(cached, { fromCache: true });
+          shownKey = key;
           return;
         } catch (e) {
           console.warn("[airbnb-sorter] cached result failed to render, collecting afresh", e);
         }
       }
       running = true;
+      shownKey = null;
+      view.showProgress(null, title);
       let result;
       try {
         result = await collect(href, {
@@ -1253,6 +1264,7 @@ ${styles_default}`,
       if (current !== controller) return;
       if (result.meta.stopReason !== "cancelled") void saveCache(storage, searchUrl, result);
       view.showResults(result);
+      shownKey = key;
     }
     const launcher = createLauncher(() => run(false));
     onSettingsChange?.(async () => {

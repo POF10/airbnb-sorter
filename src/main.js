@@ -1,6 +1,6 @@
 import { collect, HttpError } from './collector.js';
 import { parseSearchUrl, placeLabel } from './search-url.js';
-import { loadCache, saveCache } from './cache.js';
+import { loadCache, saveCache, cacheKey } from './cache.js';
 import { loadSettings, saveSettings, resolveLocale } from './settings.js';
 import { claimPage } from './guard.js';
 import { SUPPORT_LINKS } from './config.js';
@@ -34,6 +34,7 @@ export async function start({ L, leafletCss, storage, onSettingsChange }) {
 
   let overlay = null;
   let overlayLocale = null; // the language the overlay was built in
+  let shownKey = null; // cache key of the search whose results the overlay is showing
   let controller = null;
   let running = false;
 
@@ -47,6 +48,7 @@ export async function start({ L, leafletCss, storage, onSettingsChange }) {
     }
     if (!overlay) {
       overlayLocale = getLocale();
+      shownKey = null;
       overlay = createOverlay({
         L,
         css: `${leafletCss}\n${css}`,
@@ -75,9 +77,15 @@ export async function start({ L, leafletCss, storage, onSettingsChange }) {
     controller?.abort();
     const current = (controller = new AbortController());
 
+    const key = cacheKey(searchUrl);
+    const title = describeSearch({ placeLabel: placeLabel(searchUrl), searchUrl });
     // Shown before the cache read: with an async storage the overlay would otherwise sit there empty, or with
-    // the previous search, until the read ends.
-    view.showProgress(null, describeSearch({ placeLabel: placeLabel(searchUrl), searchUrl }));
+    // the previous search, until the read ends. Results of this very search stay on screen instead: reopening
+    // them must not flash a spinner.
+    if (force || shownKey !== key) {
+      shownKey = null;
+      view.showProgress(null, title);
+    }
     const cached = force ? null : await loadCache(storage, searchUrl);
     if (current !== controller) return; // another click took over while the cache was being read
     if (current.signal.aborted) {
@@ -88,6 +96,7 @@ export async function start({ L, leafletCss, storage, onSettingsChange }) {
     if (cached) {
       try {
         view.showResults(cached, { fromCache: true });
+        shownKey = key;
         return;
       } catch (e) {
         console.warn('[airbnb-sorter] cached result failed to render, collecting afresh', e);
@@ -95,6 +104,9 @@ export async function start({ L, leafletCss, storage, onSettingsChange }) {
     }
 
     running = true;
+    shownKey = null;
+    // Again: the cache may have missed for results left on screen, or failed half-way through rendering.
+    view.showProgress(null, title);
     let result;
     try {
       result = await collect(href, {
@@ -114,6 +126,7 @@ export async function start({ L, leafletCss, storage, onSettingsChange }) {
     // A cancelled run is shown but not cached, so the next click collects afresh.
     if (result.meta.stopReason !== 'cancelled') void saveCache(storage, searchUrl, result);
     view.showResults(result);
+    shownKey = key;
   }
 
   const launcher = createLauncher(() => run(false));

@@ -156,6 +156,7 @@ export function createOverlay({ L, css, initialSort, supportUrl, onSortChange, o
     destroy() {
       api.close();
       map?.remove();
+      map = null; // Leaflet throws when a map is removed twice
       list.destroy();
       host.remove();
     },
