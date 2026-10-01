@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { setLocale, getLocale, detectLocale, t } from '../src/i18n.js';
+import { LANGUAGES } from '../src/settings.js';
 import { SORTS, formatMoney, formatRating, describeSearch, formatAge, summaryText, partialReasons, progressText } from '../src/viewer/logic.js';
 
 test('detectLocale follows the page language first, then the browser', () => {
@@ -41,4 +42,27 @@ test('switching the locale switches the texts and number format', () => {
   assert.match(formatMoney(1234, '€'), /^€1\s234$/);
   setLocale('en');
   assert.equal(formatMoney(1234, '€'), '€1,234');
+});
+
+// Every key path of a dictionary: "sort.price-desc", "popup.languages.auto", …
+function keyPaths(value, prefix = '') {
+  if (value === null || typeof value !== 'object') return [prefix];
+  return Object.entries(value).flatMap(([key, inner]) => keyPaths(inner, prefix ? `${prefix}.${key}` : key));
+}
+
+test('both dictionaries have the same keys', () => {
+  setLocale('en');
+  const en = keyPaths(t()).sort();
+  setLocale('ru');
+  const ru = keyPaths(t()).sort();
+  assert.deepEqual(ru, en);
+  assert.ok(en.includes('support'));
+  assert.ok(en.includes('popup.title'));
+});
+
+test('the popup has a label for every settings language', () => {
+  for (const locale of ['en', 'ru']) {
+    setLocale(locale);
+    for (const language of LANGUAGES) assert.equal(typeof t().popup.languages[language], 'string', `${locale}: ${language}`);
+  }
 });

@@ -33,6 +33,15 @@ const DICTS = {
     saturated: n => `overfull price ranges: ${n} (some listings unavailable)`,
     partial: reasons => `Incomplete collection: ${reasons}`,
     collectFailed: message => `Could not collect the search: ${message}`,
+    support: 'Support the developer',
+    popup: {
+      title: 'Price Sorter for Airbnb',
+      howTo: 'Open a homes search on Airbnb and press “↕ Sort all”.',
+      language: 'Language',
+      languages: { auto: 'Auto', en: 'English', ru: 'Русский' },
+      github: 'GitHub',
+      report: 'Report a problem',
+    },
   },
   ru: {
     numberLocale: 'ru-RU',
@@ -66,6 +75,15 @@ const DICTS = {
     saturated: n => `переполненных ценовых диапазонов: ${n} (часть объявлений недоступна)`,
     partial: reasons => `Неполный сбор: ${reasons}`,
     collectFailed: message => `Не удалось собрать выдачу: ${message}`,
+    support: 'Поддержать разработчика',
+    popup: {
+      title: 'Сортировка по цене для Airbnb',
+      howTo: 'Откройте поиск жилья на Airbnb и нажмите «↕ Сортировать все».',
+      language: 'Язык',
+      languages: { auto: 'Авто', en: 'English', ru: 'Русский' },
+      github: 'GitHub',
+      report: 'Сообщить о проблеме',
+    },
   },
 };
 
