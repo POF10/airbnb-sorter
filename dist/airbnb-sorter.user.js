@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Airbnb Sorter
 // @namespace    airbnb-sorter.local
-// @version      0.1.0
+// @version      0.2.0
 // @description  Collects a whole Airbnb search (past the 270-listing cap) and shows it sortable by price, with photos and a map
 // @description:ru Собирает всю выдачу поиска Airbnb (а не только 270 объявлений) и показывает её с сортировкой по цене, фото и картой
 // @author       POF10
@@ -447,19 +447,19 @@
     url.searchParams.sort();
     return url.toString();
   }
-  function loadCache(storage, searchUrl) {
+  async function loadCache(storage, searchUrl) {
     try {
-      const cached = storage.get(KEY, null);
+      const cached = await storage.get(KEY, null);
       const valid = cached && cached.v === VERSION && Array.isArray(cached.listings) && typeof cached.meta?.searchUrl === "string";
       return valid && cached.key === cacheKey(searchUrl) ? { listings: cached.listings, meta: cached.meta } : null;
     } catch {
       return null;
     }
   }
-  function saveCache(storage, searchUrl, { listings, meta }) {
+  async function saveCache(storage, searchUrl, { listings, meta }) {
     const trimmed = listings.map((l) => l.photos?.length > MAX_PHOTOS ? { ...l, photos: l.photos.slice(0, MAX_PHOTOS) } : l);
     try {
-      storage.set(KEY, { v: VERSION, key: cacheKey(searchUrl), listings: trimmed, meta });
+      await storage.set(KEY, { v: VERSION, key: cacheKey(searchUrl), listings: trimmed, meta });
     } catch (e) {
       console.warn("[airbnb-sorter] could not save the cache", e);
     }
@@ -498,7 +498,16 @@
       failedPages: (n) => `pages failed to load: ${n}`,
       saturated: (n) => `overfull price ranges: ${n} (some listings unavailable)`,
       partial: (reasons) => `Incomplete collection: ${reasons}`,
-      collectFailed: (message) => `Could not collect the search: ${message}`
+      collectFailed: (message) => `Could not collect the search: ${message}`,
+      support: "Support the developer",
+      popup: {
+        title: "Price Sorter for Airbnb",
+        howTo: "Open a homes search on Airbnb and press “↕ Sort all”.",
+        language: "Language",
+        languages: { auto: "Auto", en: "English", ru: "Русский" },
+        github: "GitHub",
+        report: "Report a problem"
+      }
     },
     ru: {
       numberLocale: "ru-RU",
@@ -531,7 +540,16 @@
       failedPages: (n) => `не загрузилось страниц: ${n}`,
       saturated: (n) => `переполненных ценовых диапазонов: ${n} (часть объявлений недоступна)`,
       partial: (reasons) => `Неполный сбор: ${reasons}`,
-      collectFailed: (message) => `Не удалось собрать выдачу: ${message}`
+      collectFailed: (message) => `Не удалось собрать выдачу: ${message}`,
+      support: "Поддержать разработчика",
+      popup: {
+        title: "Сортировка по цене для Airbnb",
+        howTo: "Откройте поиск жилья на Airbnb и нажмите «↕ Сортировать все».",
+        language: "Язык",
+        languages: { auto: "Авто", en: "English", ru: "Русский" },
+        github: "GitHub",
+        report: "Сообщить о проблеме"
+      }
     }
   };
   function pluralRu(n, one, few, many) {
@@ -553,55 +571,6 @@
     if (isRu(pageLang)) return "ru";
     if (pageLang) return "en";
     return isRu(browserLang) ? "ru" : "en";
-  }
-
-  // src/launcher.js
-  var STYLE = [
-    "all:initial",
-    "position:fixed",
-    "right:24px",
-    "bottom:24px",
-    "z-index:2147483646",
-    "padding:12px 18px",
-    "border-radius:24px",
-    "background:#222",
-    "color:#fff",
-    "cursor:pointer",
-    'font:600 14px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif',
-    "box-shadow:0 4px 12px rgba(0,0,0,.25)"
-  ].join(";");
-  function createLauncher(onClick) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.textContent = t().launcher;
-    btn.setAttribute("style", STYLE);
-    btn.addEventListener("click", () => {
-      btn.blur();
-      onClick();
-    });
-    document.body.append(btn);
-    let lastHref = null;
-    const sync = () => {
-      if (location.href === lastHref) return;
-      lastHref = location.href;
-      btn.style.display = isHomesSearchPath(location.pathname) ? "block" : "none";
-    };
-    sync();
-    setInterval(sync, 500);
-    return btn;
-  }
-
-  // src/viewer/dom.js
-  function el(tag, className, text) {
-    const node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text != null) node.textContent = text;
-    return node;
-  }
-  function button(text, className) {
-    const node = el("button", className, text);
-    node.type = "button";
-    return node;
   }
 
   // src/viewer/logic.js
@@ -706,6 +675,108 @@
     if (!p) return t().loadingFirst;
     const of = p.expectedTotal ? t().ofExpected(count(p.expectedTotal)) : "";
     return t().progress({ ...p, listings: count(p.listings) }, of);
+  }
+
+  // src/settings.js
+  var SETTINGS_KEY = "settings";
+  var LANGUAGES = ["auto", "en", "ru"];
+  var DEFAULT_SETTINGS = Object.freeze({ language: "auto", sort: DEFAULT_SORT });
+  function normalizeSettings(raw) {
+    const value = raw && typeof raw === "object" ? raw : {};
+    return {
+      language: LANGUAGES.includes(value.language) ? value.language : DEFAULT_SETTINGS.language,
+      sort: typeof value.sort === "string" && Object.hasOwn(SORTS, value.sort) ? value.sort : DEFAULT_SETTINGS.sort
+    };
+  }
+  async function loadSettings(storage) {
+    try {
+      return normalizeSettings(await storage.get(SETTINGS_KEY, null));
+    } catch {
+      return { ...DEFAULT_SETTINGS };
+    }
+  }
+  async function saveSettings(storage, patch) {
+    const next = normalizeSettings({ ...await loadSettings(storage), ...patch });
+    try {
+      await storage.set(SETTINGS_KEY, next);
+    } catch (e) {
+      console.warn("[airbnb-sorter] could not save the settings", e);
+    }
+    return next;
+  }
+  function resolveLocale(language, detect) {
+    return language === "auto" ? detect() : language;
+  }
+
+  // src/guard.js
+  var ATTRIBUTE = "data-airbnb-sorter";
+  function isPageClaimed(doc) {
+    return doc.documentElement.hasAttribute(ATTRIBUTE);
+  }
+  function claimPage(doc) {
+    if (isPageClaimed(doc)) return false;
+    doc.documentElement.setAttribute(ATTRIBUTE, "");
+    return true;
+  }
+
+  // src/config.js
+  var SUPPORT_LINKS = [
+    { label: "Ko-fi", url: "https://example.com/support/ko-fi" },
+    { label: "Buy Me a Coffee", url: "https://example.com/support/buy-me-a-coffee" },
+    { label: "PayPal", url: "https://example.com/support/paypal" }
+  ];
+
+  // src/launcher.js
+  var STYLE = [
+    "all:initial",
+    "position:fixed",
+    "right:24px",
+    "bottom:24px",
+    "z-index:2147483646",
+    "padding:12px 18px",
+    "border-radius:24px",
+    "background:#222",
+    "color:#fff",
+    "cursor:pointer",
+    'font:600 14px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif',
+    "box-shadow:0 4px 12px rgba(0,0,0,.25)"
+  ].join(";");
+  function createLauncher(onClick) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = t().launcher;
+    btn.setAttribute("style", STYLE);
+    btn.addEventListener("click", () => {
+      btn.blur();
+      onClick();
+    });
+    document.body.append(btn);
+    let lastHref = null;
+    const sync = () => {
+      if (location.href === lastHref) return;
+      lastHref = location.href;
+      btn.style.display = isHomesSearchPath(location.pathname) ? "block" : "none";
+    };
+    sync();
+    setInterval(sync, 500);
+    return {
+      refreshLabel() {
+        btn.textContent = t().launcher;
+      }
+    };
+  }
+
+  // src/viewer/dom.js
+  function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text != null) node.textContent = text;
+    return node;
+  }
+  function button(text, className) {
+    const node = el("button", className, text);
+    node.type = "button";
+    return node;
   }
 
   // src/viewer/card.js
@@ -911,7 +982,7 @@
   }
 
   // src/viewer/overlay.js
-  function createOverlay({ L, css, onRefresh, onCancel, onClose }) {
+  function createOverlay({ L, css, initialSort, supportUrl, onSortChange, onRefresh, onCancel, onClose }) {
     const host = document.createElement("div");
     host.id = "airbnb-sorter";
     host.style.cssText = "position:fixed;inset:0;z-index:2147483647;display:none";
@@ -926,13 +997,14 @@
     summaryLine.append(summary, warn);
     const info = el("div", "abs-info");
     info.append(sub, summaryLine);
+    const startSort = Object.hasOwn(SORTS, initialSort ?? "") ? initialSort : DEFAULT_SORT;
     const sortSelect = el("select", "abs-select");
     for (const [id, { label }] of Object.entries(SORTS)) {
       const option = el("option", null, label);
       option.value = id;
       sortSelect.append(option);
     }
-    sortSelect.value = DEFAULT_SORT;
+    sortSelect.value = startSort;
     const areaBox = el("input");
     areaBox.type = "checkbox";
     const areaLabel = el("label", "abs-toggle");
@@ -942,7 +1014,17 @@
     const closeBtn = button("×", "abs-close");
     closeBtn.title = t().close;
     const controls = el("div", "abs-controls");
-    controls.append(sortSelect, areaLabel, refreshBtn, viewBtn, closeBtn);
+    controls.append(sortSelect, areaLabel, refreshBtn, viewBtn);
+    if (supportUrl) {
+      const support = el("a", "abs-support", "♥");
+      support.href = supportUrl;
+      support.target = "_blank";
+      support.rel = "noopener";
+      support.title = t().support;
+      support.setAttribute("aria-label", t().support);
+      controls.append(support);
+    }
+    controls.append(closeBtn);
     const head = el("header", "abs-head");
     head.append(info, controls);
     const progressLabel = el("div");
@@ -961,7 +1043,7 @@
     root.append(head, progress, errorBox, main);
     shadow.append(style, root);
     document.body.append(host);
-    const state = { listings: [], meta: null, fromCache: false, sortId: DEFAULT_SORT, onlyInMap: false };
+    const state = { listings: [], meta: null, fromCache: false, sortId: startSort, onlyInMap: false };
     let savedOverflow = "";
     function setMode(mode) {
       progress.hidden = mode !== "progress";
@@ -989,6 +1071,7 @@
     }
     sortSelect.addEventListener("change", () => {
       state.sortId = sortSelect.value;
+      onSortChange?.(state.sortId);
       render();
     });
     areaBox.addEventListener("change", () => {
@@ -1013,8 +1096,11 @@
       api.close();
     };
     const api = {
+      isOpen() {
+        return host.style.display !== "none";
+      },
       open() {
-        if (host.style.display !== "none") return;
+        if (api.isOpen()) return;
         host.style.display = "";
         savedOverflow = document.documentElement.style.overflow;
         document.documentElement.style.overflow = "hidden";
@@ -1022,11 +1108,16 @@
         root.focus({ preventScroll: true });
       },
       close() {
-        if (host.style.display === "none") return;
+        if (!api.isOpen()) return;
         host.style.display = "none";
         document.documentElement.style.overflow = savedOverflow;
         window.removeEventListener("keydown", onKey, true);
         onClose();
+      },
+      // Removes the layer from the page; the instance must not be used afterwards.
+      destroy() {
+        api.close();
+        host.remove();
       },
       // title: the search being collected (the header may still show the previous one).
       showProgress(p, title) {
@@ -1043,7 +1134,7 @@
         shownKey = "";
         sub.textContent = describeSearch(meta);
         setMode("results");
-        if (host.style.display !== "none") list3.el.focus({ preventScroll: true });
+        if (api.isOpen()) list3.el.focus({ preventScroll: true });
         map ?? (map = createMap(mapBox, {
           L,
           onMarkerHover: (id) => list3.highlight(id),
@@ -1060,7 +1151,7 @@
   }
 
   // src/viewer/styles.css
-  var styles_default = ':host { all: initial; position: fixed; inset: 0; z-index: 2147483647; }\n[hidden] { display: none !important; }\n\n.abs-root {\n  position: absolute; inset: 0; display: flex; flex-direction: column;\n  background: #fff; color: #222;\n  font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;\n}\n.abs-root *, .abs-root *::before, .abs-root *::after { box-sizing: border-box; }\n.abs-root:focus, .abs-list:focus { outline: none; } /* programmatic focus targets, not controls */\n\n/* Header */\n.abs-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 12px 24px; border-bottom: 1px solid #ebebeb; }\n.abs-sub { font-size: 16px; font-weight: 600; }\n.abs-summary { display: flex; align-items: center; gap: 6px; color: #6a6a6a; font-size: 13px; }\n.abs-warn { color: #c13515; cursor: help; }\n.abs-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }\n.abs-select, .abs-btn { height: 36px; padding: 0 14px; border: 1px solid #b0b0b0; border-radius: 18px; background: #fff; color: inherit; font: inherit; cursor: pointer; }\n.abs-select:hover:not(:disabled), .abs-btn:hover:not(:disabled) { border-color: #222; }\n.abs-select:disabled, .abs-btn:disabled { opacity: .5; cursor: default; }\n.abs-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }\n.abs-close { width: 36px; height: 36px; border: 0; border-radius: 50%; background: transparent; color: inherit; font-size: 26px; line-height: 1; cursor: pointer; }\n.abs-close:hover { background: #f2f2f2; }\n\n/* Progress / error */\n.abs-progress, .abs-error { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 24px; text-align: center; }\n.abs-error { color: #c13515; }\n.abs-spinner { width: 32px; height: 32px; border: 3px solid #ebebeb; border-top-color: #ff385c; border-radius: 50%; animation: abs-spin .9s linear infinite; }\n@keyframes abs-spin { to { transform: rotate(360deg); } }\n\n/* Layout */\n.abs-main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); grid-template-rows: minmax(0, 1fr); }\n.abs-list { overflow-y: auto; padding: 24px; }\n.abs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 28px 20px; }\n.abs-sentinel { height: 1px; }\n.abs-map { position: relative; min-height: 0; }\n\n/* Card */\n.abs-card { display: block; color: inherit; text-decoration: none; border-radius: 14px; outline-offset: 4px; }\n.abs-card--hl { outline: 2px solid #222; }\n.abs-photo { position: relative; aspect-ratio: 20 / 19; overflow: hidden; border-radius: 12px; background: #f2f2f2; }\n.abs-photo img { display: block; width: 100%; height: 100%; object-fit: cover; }\n.abs-badge { position: absolute; top: 12px; left: 12px; padding: 4px 10px; border-radius: 12px; background: #fff; font-size: 12px; font-weight: 600; box-shadow: 0 1px 3px rgba(0, 0, 0, .15); }\n.abs-nav { position: absolute; top: 50%; width: 30px; height: 30px; border: 0; border-radius: 50%; background: rgba(255, 255, 255, .9); color: #222; font-size: 18px; line-height: 1; cursor: pointer; opacity: 0; transform: translateY(-50%); transition: opacity .15s; }\n.abs-photo:hover .abs-nav, .abs-photo:focus-within .abs-nav { opacity: 1; }\n.abs-nav--prev { left: 10px; }\n.abs-nav--next { right: 10px; }\n.abs-dots { position: absolute; left: 0; right: 0; bottom: 10px; display: flex; justify-content: center; gap: 5px; }\n.abs-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, .6); }\n.abs-dot--on { background: #fff; }\n.abs-body { display: flex; flex-direction: column; gap: 2px; padding-top: 10px; }\n.abs-row { display: flex; justify-content: space-between; gap: 8px; }\n.abs-title { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }\n.abs-rating { white-space: nowrap; }\n.abs-muted { color: #6a6a6a; }\n.abs-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.abs-price { margin-top: 4px; }\n.abs-price s { margin-right: 4px; }\n.abs-card--compact .abs-photo { border-radius: 12px 12px 0 0; }\n.abs-card--compact .abs-body { padding: 8px 10px 10px; }\n\n/* Map popup */\n.abs-popup .leaflet-popup-content-wrapper { padding: 0; overflow: hidden; border-radius: 12px; }\n.abs-popup .leaflet-popup-content { width: 260px !important; margin: 0; font-size: inherit; line-height: inherit; }\n/* Leaflet colours links (.leaflet-container a) and sets its own font on the map; cards keep ours. */\n.abs-popup a.abs-card { color: #222; }\n.abs-map.leaflet-container { font: inherit; }\n\n/* Map pins */\n.abs-pin { width: 0; height: 0; }\n.abs-pin-label {\n  position: absolute; padding: 4px 8px; border-radius: 14px; background: #fff; color: #222; white-space: nowrap;\n  font: 600 13px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;\n  box-shadow: 0 0 0 1px rgba(0, 0, 0, .08), 0 2px 4px rgba(0, 0, 0, .18);\n  transform: translate(-50%, -50%); transition: transform .1s;\n}\n.abs-pin:hover .abs-pin-label { transform: translate(-50%, -50%) scale(1.08); }\n.abs-pin:hover .abs-pin-label, .abs-pin--hl .abs-pin-label { background: #222; color: #fff; }\n.abs-map--dense .abs-pin-label { width: 10px; height: 10px; padding: 0; border-radius: 50%; background: #ff385c; font-size: 0; box-shadow: 0 0 0 2px #fff; }\n.abs-map--dense .abs-pin:hover .abs-pin-label,\n.abs-map--dense .abs-pin--hl .abs-pin-label { width: auto; height: auto; padding: 4px 8px; border-radius: 14px; background: #222; color: #fff; font-size: 13px; box-shadow: none; }\n\n/* Narrow screens: list or map, switched by a button */\n.abs-only-narrow { display: none; }\n@media (max-width: 900px) {\n  .abs-head { padding: 10px 16px; }\n  .abs-list { padding: 16px; }\n  .abs-main { grid-template-columns: minmax(0, 1fr); }\n  .abs-main .abs-map { display: none; }\n  .abs-main--map .abs-map { display: block; }\n  .abs-main--map .abs-list { display: none; }\n  .abs-only-narrow { display: inline-block; }\n}\n';
+  var styles_default = ':host { all: initial; position: fixed; inset: 0; z-index: 2147483647; }\n[hidden] { display: none !important; }\n\n.abs-root {\n  position: absolute; inset: 0; display: flex; flex-direction: column;\n  background: #fff; color: #222;\n  font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;\n}\n.abs-root *, .abs-root *::before, .abs-root *::after { box-sizing: border-box; }\n.abs-root:focus, .abs-list:focus { outline: none; } /* programmatic focus targets, not controls */\n\n/* Header */\n.abs-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 12px 24px; border-bottom: 1px solid #ebebeb; }\n.abs-sub { font-size: 16px; font-weight: 600; }\n.abs-summary { display: flex; align-items: center; gap: 6px; color: #6a6a6a; font-size: 13px; }\n.abs-warn { color: #c13515; cursor: help; }\n.abs-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }\n.abs-select, .abs-btn { height: 36px; padding: 0 14px; border: 1px solid #b0b0b0; border-radius: 18px; background: #fff; color: inherit; font: inherit; cursor: pointer; }\n.abs-select:hover:not(:disabled), .abs-btn:hover:not(:disabled) { border-color: #222; }\n.abs-select:disabled, .abs-btn:disabled { opacity: .5; cursor: default; }\n.abs-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }\n.abs-close { width: 36px; height: 36px; border: 0; border-radius: 50%; background: transparent; color: inherit; font-size: 26px; line-height: 1; cursor: pointer; }\n.abs-close:hover { background: #f2f2f2; }\n.abs-support { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; color: #e0245e; font-size: 18px; line-height: 1; text-decoration: none; }\n.abs-support:hover { background: #fdecef; }\n\n/* Progress / error */\n.abs-progress, .abs-error { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 24px; text-align: center; }\n.abs-error { color: #c13515; }\n.abs-spinner { width: 32px; height: 32px; border: 3px solid #ebebeb; border-top-color: #ff385c; border-radius: 50%; animation: abs-spin .9s linear infinite; }\n@keyframes abs-spin { to { transform: rotate(360deg); } }\n\n/* Layout */\n.abs-main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); grid-template-rows: minmax(0, 1fr); }\n.abs-list { overflow-y: auto; padding: 24px; }\n.abs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 28px 20px; }\n.abs-sentinel { height: 1px; }\n.abs-map { position: relative; min-height: 0; }\n\n/* Card */\n.abs-card { display: block; color: inherit; text-decoration: none; border-radius: 14px; outline-offset: 4px; }\n.abs-card--hl { outline: 2px solid #222; }\n.abs-photo { position: relative; aspect-ratio: 20 / 19; overflow: hidden; border-radius: 12px; background: #f2f2f2; }\n.abs-photo img { display: block; width: 100%; height: 100%; object-fit: cover; }\n.abs-badge { position: absolute; top: 12px; left: 12px; padding: 4px 10px; border-radius: 12px; background: #fff; font-size: 12px; font-weight: 600; box-shadow: 0 1px 3px rgba(0, 0, 0, .15); }\n.abs-nav { position: absolute; top: 50%; width: 30px; height: 30px; border: 0; border-radius: 50%; background: rgba(255, 255, 255, .9); color: #222; font-size: 18px; line-height: 1; cursor: pointer; opacity: 0; transform: translateY(-50%); transition: opacity .15s; }\n.abs-photo:hover .abs-nav, .abs-photo:focus-within .abs-nav { opacity: 1; }\n.abs-nav--prev { left: 10px; }\n.abs-nav--next { right: 10px; }\n.abs-dots { position: absolute; left: 0; right: 0; bottom: 10px; display: flex; justify-content: center; gap: 5px; }\n.abs-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, .6); }\n.abs-dot--on { background: #fff; }\n.abs-body { display: flex; flex-direction: column; gap: 2px; padding-top: 10px; }\n.abs-row { display: flex; justify-content: space-between; gap: 8px; }\n.abs-title { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }\n.abs-rating { white-space: nowrap; }\n.abs-muted { color: #6a6a6a; }\n.abs-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.abs-price { margin-top: 4px; }\n.abs-price s { margin-right: 4px; }\n.abs-card--compact .abs-photo { border-radius: 12px 12px 0 0; }\n.abs-card--compact .abs-body { padding: 8px 10px 10px; }\n\n/* Map popup */\n.abs-popup .leaflet-popup-content-wrapper { padding: 0; overflow: hidden; border-radius: 12px; }\n.abs-popup .leaflet-popup-content { width: 260px !important; margin: 0; font-size: inherit; line-height: inherit; }\n/* Leaflet colours links (.leaflet-container a) and sets its own font on the map; cards keep ours. */\n.abs-popup a.abs-card { color: #222; }\n.abs-map.leaflet-container { font: inherit; }\n\n/* Map pins */\n.abs-pin { width: 0; height: 0; }\n.abs-pin-label {\n  position: absolute; padding: 4px 8px; border-radius: 14px; background: #fff; color: #222; white-space: nowrap;\n  font: 600 13px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;\n  box-shadow: 0 0 0 1px rgba(0, 0, 0, .08), 0 2px 4px rgba(0, 0, 0, .18);\n  transform: translate(-50%, -50%); transition: transform .1s;\n}\n.abs-pin:hover .abs-pin-label { transform: translate(-50%, -50%) scale(1.08); }\n.abs-pin:hover .abs-pin-label, .abs-pin--hl .abs-pin-label { background: #222; color: #fff; }\n.abs-map--dense .abs-pin-label { width: 10px; height: 10px; padding: 0; border-radius: 50%; background: #ff385c; font-size: 0; box-shadow: 0 0 0 2px #fff; }\n.abs-map--dense .abs-pin:hover .abs-pin-label,\n.abs-map--dense .abs-pin--hl .abs-pin-label { width: auto; height: auto; padding: 4px 8px; border-radius: 14px; background: #222; color: #fff; font-size: 13px; box-shadow: none; }\n\n/* Narrow screens: list or map, switched by a button */\n.abs-only-narrow { display: none; }\n@media (max-width: 900px) {\n  .abs-head { padding: 10px 16px; }\n  .abs-list { padding: 16px; }\n  .abs-main { grid-template-columns: minmax(0, 1fr); }\n  .abs-main .abs-map { display: none; }\n  .abs-main--map .abs-map { display: block; }\n  .abs-main--map .abs-list { display: none; }\n  .abs-only-narrow { display: inline-block; }\n}\n';
 
   // src/main.js
   async function fetchPage(url, signal) {
@@ -1068,19 +1159,42 @@
     if (!response.ok) throw new HttpError(response.status);
     return response.text();
   }
-  function start({ L, leafletCss, storage }) {
-    setLocale(detectLocale({ pageLang: document.documentElement.lang, browserLang: navigator.language }));
+  async function start({ L, leafletCss, storage, onSettingsChange }) {
+    if (!claimPage(document)) return false;
+    let settings = await loadSettings(storage);
+    const applyLocale = () => setLocale(resolveLocale(
+      settings.language,
+      () => detectLocale({ pageLang: document.documentElement.lang, browserLang: navigator.language })
+    ));
+    applyLocale();
     let overlay = null;
+    let overlayStale = false;
     let controller = null;
     let running = false;
-    const getOverlay = () => overlay ?? (overlay = createOverlay({
-      L,
-      css: `${leafletCss}
+    function getOverlay() {
+      if (overlay && overlayStale && !running && !overlay.isOpen()) {
+        overlay.destroy();
+        overlay = null;
+      }
+      if (!overlay) {
+        overlayStale = false;
+        overlay = createOverlay({
+          L,
+          css: `${leafletCss}
 ${styles_default}`,
-      onRefresh: () => run(true),
-      onCancel: () => controller?.abort(),
-      onClose: () => controller?.abort()
-    }));
+          initialSort: settings.sort,
+          supportUrl: SUPPORT_LINKS[0]?.url,
+          onSortChange: (sort) => {
+            settings = { ...settings, sort };
+            void saveSettings(storage, { sort });
+          },
+          onRefresh: () => run(true),
+          onCancel: () => controller?.abort(),
+          onClose: () => controller?.abort()
+        });
+      }
+      return overlay;
+    }
     async function run(force) {
       const view = getOverlay();
       view.open();
@@ -1089,7 +1203,8 @@ ${styles_default}`,
       const { searchUrl } = parseSearchUrl(href);
       controller?.abort();
       const current = controller = new AbortController();
-      const cached = force ? null : loadCache(storage, searchUrl);
+      const cached = force ? null : await loadCache(storage, searchUrl);
+      if (current !== controller) return;
       if (cached) {
         try {
           view.showResults(cached, { fromCache: true });
@@ -1118,10 +1233,19 @@ ${styles_default}`,
         if (current === controller) running = false;
       }
       if (current !== controller) return;
-      if (result.meta.stopReason !== "cancelled") saveCache(storage, searchUrl, result);
+      if (result.meta.stopReason !== "cancelled") void saveCache(storage, searchUrl, result);
       view.showResults(result);
     }
-    createLauncher(() => run(false));
+    const launcher = createLauncher(() => run(false));
+    onSettingsChange?.(async () => {
+      const previous = settings.language;
+      settings = await loadSettings(storage);
+      if (settings.language === previous) return;
+      applyLocale();
+      launcher.refreshLabel();
+      overlayStale = true;
+    });
+    return true;
   }
 
   // src/userscript.js
