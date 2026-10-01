@@ -124,6 +124,10 @@ npm run build   # dist/airbnb-sorter.user.js, dist/airbnb-sorter.inject.js, dist
 
 Требуется Node.js 22+.
 
+## Поддержать
+
+Если инструмент экономит вам время, разработку можно поддержать: [PayPal](https://paypal.me/Maksims1001).
+
 ## Лицензия
 
 [MIT](LICENSE). Карта — [Leaflet](https://leafletjs.com/) и тайлы [OpenStreetMap](https://www.openstreetmap.org/copyright).

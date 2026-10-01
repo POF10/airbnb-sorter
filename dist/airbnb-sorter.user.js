@@ -724,9 +724,7 @@
 
   // src/config.js
   var SUPPORT_LINKS = [
-    { label: "Ko-fi", url: "https://example.com/support/ko-fi" },
-    { label: "Buy Me a Coffee", url: "https://example.com/support/buy-me-a-coffee" },
-    { label: "PayPal", url: "https://example.com/support/paypal" }
+    { label: "PayPal", url: "https://paypal.me/Maksims1001" }
   ];
 
   // src/launcher.js

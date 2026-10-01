@@ -124,6 +124,10 @@ Releasing: bump `version` in `package.json`, `npm run build`, commit the rebuilt
 
 Requires Node.js 22+.
 
+## Support
+
+If the tool saves you time, you can support its development: [PayPal](https://paypal.me/Maksims1001).
+
 ## License
 
 [MIT](LICENSE). Map by [Leaflet](https://leafletjs.com/) with [OpenStreetMap](https://www.openstreetmap.org/copyright) tiles.
