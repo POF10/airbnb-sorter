@@ -69,6 +69,7 @@ This extension is not affiliated with, endorsed by or sponsored by Airbnb. Airbn
 
 - Icon: `src/extension/icons/128.png`.
 - Screenshots (1280×800): `docs/store/screenshots/overlay-en.png`, `docs/store/screenshots/overlay-ru.png` — the dev stand on synthetic data.
+- Small promo tile (440×280, required by the store): `docs/store/promo-small-440x280.png`.
 
 ## Before submitting
 
