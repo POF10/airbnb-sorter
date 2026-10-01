@@ -2,9 +2,9 @@
 
 **English** · [Русский](README.ru.md)
 
-A Tampermonkey userscript that adds the one thing Airbnb search is missing: **sorting the whole search by price**. Airbnb shows at most 270 listings per search and cannot sort them by price. This script collects the entire search (about 1,300 listings for a weekend in Riga) and opens it on top of the page in the familiar look: cards with photos, a map with price pins, and sorting by price, rating or number of reviews.
+A Chrome extension and a Tampermonkey userscript that add the one thing Airbnb search is missing: **sorting the whole search by price**. Airbnb shows at most 270 listings per search and cannot sort them by price. It collects the entire search (about 1,300 listings for a weekend in Riga) and opens it on top of the page in the familiar look: cards with photos, a map with price pins, and sorting by price, rating or number of reviews.
 
-The interface is in English, or in Russian on Russian-language Airbnb pages.
+The interface is in English, or in Russian on Russian-language Airbnb pages; the extension also lets you choose the language.
 
 ## Features
 
@@ -17,6 +17,24 @@ The interface is in English, or in Russian on Russian-language Airbnb pages.
 - **Gentle with Airbnb:** three requests at a time with pauses in between, automatic stop at the first sign of blocking, and a cap on the number of requests.
 
 ## Installation
+
+There are two ways to install it. Both give the same button and the same result; pick one (with both installed the button still appears once).
+
+### Option 1: Chrome extension
+
+Works in Chrome, Edge and other Chromium browsers. The extension is not in the Chrome Web Store yet, so it is loaded from a folder:
+
+1. Open the [latest release](https://github.com/POF10/airbnb-sorter/releases/latest) and download `airbnb-sorter-extension-<version>.zip`.
+2. Unpack the zip into a folder you will keep: the browser loads the extension from it every time it starts.
+3. Type `chrome://extensions` in the address bar (`edge://extensions` in Edge) and press Enter.
+4. Turn on **Developer mode** in the top-right corner.
+5. Click **Load unpacked** and choose the unpacked folder (the one with `manifest.json` in it).
+
+To update, download the new zip, unpack it over the old folder and press the reload arrow on the extension's card.
+
+Clicking the extension's icon in the toolbar opens its settings, where you can choose the interface language (Auto, English, Русский).
+
+### Option 2: Tampermonkey userscript
 
 Step by step, no technical knowledge needed. Takes about two minutes.
 
@@ -60,11 +78,12 @@ The collection stops by itself when Airbnb starts blocking requests (a page with
 
 If you set a price range yourself, only that range is split, and in the same mode as yours: per night, or per stay when "Display total price" is on.
 
-The full design, including what was verified against the live site, is in [docs/superpowers/specs/2026-09-28-airbnb-sorter-design.md](docs/superpowers/specs/2026-09-28-airbnb-sorter-design.md) (in Russian).
+The full design, including what was verified against the live site, is in [docs/superpowers/specs/2026-09-28-airbnb-sorter-design.md](docs/superpowers/specs/2026-09-28-airbnb-sorter-design.md); the extension's design is in [docs/superpowers/specs/2026-10-01-chrome-extension-design.md](docs/superpowers/specs/2026-10-01-chrome-extension-design.md) (both in Russian).
 
 ## Limitations and risks
 
 - Homes search only (`/s/…/homes`); experiences and services are not supported.
+- The extension runs on the Airbnb domains listed in `src/extension/domains.js` (70 of them); the userscript matches any Airbnb domain by pattern. If the button is missing on an Airbnb domain, please open an issue.
 - Airbnb's results are personalized and can change while the collection runs, so single listings may be lost.
 - The script depends on the structure of Airbnb's pages. When Airbnb changes it, the collection fails with a message like "Could not collect the search: no …", where the part after "no" names the path that stopped resolving — a hint for what to fix in `src/extract.js`.
 - Airbnb's terms of service prohibit automated data collection. The script runs in your own session, with pauses and limits, but the risk of account restrictions is not zero. Use at your own risk.
@@ -74,11 +93,13 @@ The full design, including what was verified against the live site, is in [docs/
 ```bash
 npm install
 npm test        # unit tests (node:test); the collector is tested against a synthetic Airbnb
-npm run dev     # UI dev stand on synthetic data: http://localhost:8000/  (?lang=ru for Russian)
-npm run build   # dist/airbnb-sorter.user.js and dist/airbnb-sorter.inject.js
+npm run dev     # dev stand on synthetic data: http://localhost:8000/ (overlay, ?lang=ru for Russian) and /popup.html (extension popup)
+npm run build   # dist/airbnb-sorter.user.js, dist/airbnb-sorter.inject.js, dist/extension/ and its zip
 ```
 
 `dist/airbnb-sorter.inject.js` is the same program without Tampermonkey: paste its contents into the console on an Airbnb search page and the same button appears. Handy for debugging; the cache lives in localStorage in that mode.
+
+`dist/extension/` is the unpacked Chrome extension: load it on `chrome://extensions` (Developer mode → Load unpacked). After a rebuild press the reload arrow on its card and reload the Airbnb tab.
 
 Layout:
 
@@ -92,10 +113,14 @@ Layout:
 | `src/cache.js` | cache of the last collection |
 | `src/i18n.js` | UI texts (English, Russian) |
 | `src/viewer/` | the overlay in a Shadow DOM: cards, list, map (Leaflet + OpenStreetMap), sorting |
-| `src/launcher.js`, `src/main.js` | the on-page button and the wiring |
-| `src/userscript.js`, `dev/inject.js` | entry points for Tampermonkey and for running without it |
+| `src/settings.js` | settings: language, last sort order |
+| `src/config.js` | project and support links |
+| `src/launcher.js`, `src/guard.js`, `src/main.js` | the on-page button, the one-instance-per-page guard and the wiring |
+| `src/userscript.js`, `dev/inject.js`, `src/extension/content.js` | entry points: Tampermonkey, the console, the Chrome extension |
+| `src/extension/` | the rest of the extension: manifest, domain list, `chrome.storage` adapter, popup, icons, names |
+| `scripts/make-icons.mjs` | draws the extension icons |
 
-Releasing: bump `version` in `package.json`, `npm run build`, commit the rebuilt `dist/airbnb-sorter.user.js` (it is the install/update URL) and attach it to a GitHub release named `v<version>`. Installed copies update themselves from that file.
+Releasing: bump `version` in `package.json`, `npm run build`, commit the rebuilt `dist/airbnb-sorter.user.js` (it is the install/update URL of the userscript) and create a GitHub release named `v<version>` with `dist/airbnb-sorter.user.js` and `dist/airbnb-sorter-extension-<version>.zip` attached. Installed userscripts update themselves from the committed file; the same zip is what gets uploaded to the Chrome Web Store. The build warns while `src/config.js` still has placeholder support links: do not release with them.
 
 Requires Node.js 22+.
 
