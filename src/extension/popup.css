@@ -1,0 +1,26 @@
+* , *::before, *::after { box-sizing: border-box; }
+body {
+  width: 320px; margin: 0; padding: 16px; background: #fff; color: #222;
+  font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+#app { display: flex; flex-direction: column; gap: 14px; }
+
+.pop-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.pop-title { margin: 0; font-size: 16px; font-weight: 600; }
+.pop-version { color: #6a6a6a; font-size: 12px; white-space: nowrap; }
+.pop-howto { margin: 0; color: #6a6a6a; }
+
+.pop-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pop-label { font-weight: 600; }
+.pop-select { height: 36px; padding: 0 12px; border: 1px solid #b0b0b0; border-radius: 18px; background: #fff; color: inherit; font: inherit; cursor: pointer; }
+.pop-select:hover { border-color: #222; }
+
+.pop-support { padding-top: 14px; border-top: 1px solid #ebebeb; }
+.pop-support-title { margin: 0 0 10px; font-size: 14px; font-weight: 600; }
+.pop-support-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.pop-btn { display: inline-flex; align-items: center; height: 36px; padding: 0 14px; border-radius: 18px; background: #222; color: #fff; font-weight: 600; text-decoration: none; }
+.pop-btn:hover { background: #000; }
+
+.pop-foot { padding-top: 12px; border-top: 1px solid #ebebeb; color: #6a6a6a; font-size: 13px; }
+.pop-foot a { color: inherit; }
+.pop-foot a:hover { color: #222; }
