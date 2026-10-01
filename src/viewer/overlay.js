@@ -6,9 +6,10 @@ import {
 } from './logic.js';
 import { t } from '../i18n.js';
 
-// Full-screen layer in a Shadow DOM. Knows nothing about Airbnb: renders { listings, meta } and reports
-// user intents. L — Leaflet global; css — Leaflet CSS + styles.css.
-export function createOverlay({ L, css, onRefresh, onCancel, onClose }) {
+// Full-screen layer in a Shadow DOM. Knows nothing about Airbnb or storage: renders { listings, meta } and
+// reports user intents. L — Leaflet; css — Leaflet CSS + styles.css; initialSort — the sort to open with;
+// supportUrl — where the ♥ in the header leads (no link without it).
+export function createOverlay({ L, css, initialSort, supportUrl, onSortChange, onRefresh, onCancel, onClose }) {
   const host = document.createElement('div');
   host.id = 'airbnb-sorter';
   // Inline, so no page rule matching the host div can override the placement.
@@ -27,13 +28,14 @@ export function createOverlay({ L, css, onRefresh, onCancel, onClose }) {
   const info = el('div', 'abs-info');
   info.append(sub, summaryLine);
 
+  const startSort = Object.hasOwn(SORTS, initialSort ?? '') ? initialSort : DEFAULT_SORT;
   const sortSelect = el('select', 'abs-select');
   for (const [id, { label }] of Object.entries(SORTS)) {
     const option = el('option', null, label);
     option.value = id;
     sortSelect.append(option);
   }
-  sortSelect.value = DEFAULT_SORT;
+  sortSelect.value = startSort;
   const areaBox = el('input');
   areaBox.type = 'checkbox';
   const areaLabel = el('label', 'abs-toggle');
@@ -43,7 +45,17 @@ export function createOverlay({ L, css, onRefresh, onCancel, onClose }) {
   const closeBtn = button('×', 'abs-close');
   closeBtn.title = t().close;
   const controls = el('div', 'abs-controls');
-  controls.append(sortSelect, areaLabel, refreshBtn, viewBtn, closeBtn);
+  controls.append(sortSelect, areaLabel, refreshBtn, viewBtn);
+  if (supportUrl) {
+    const support = el('a', 'abs-support', '♥');
+    support.href = supportUrl;
+    support.target = '_blank';
+    support.rel = 'noopener';
+    support.title = t().support;
+    support.setAttribute('aria-label', t().support);
+    controls.append(support);
+  }
+  controls.append(closeBtn);
   const head = el('header', 'abs-head');
   head.append(info, controls);
 
@@ -66,7 +78,7 @@ export function createOverlay({ L, css, onRefresh, onCancel, onClose }) {
   shadow.append(style, root);
   document.body.append(host);
 
-  const state = { listings: [], meta: null, fromCache: false, sortId: DEFAULT_SORT, onlyInMap: false };
+  const state = { listings: [], meta: null, fromCache: false, sortId: startSort, onlyInMap: false };
   let savedOverflow = '';
 
   function setMode(mode) {
@@ -97,7 +109,11 @@ export function createOverlay({ L, css, onRefresh, onCancel, onClose }) {
     warn.title = t().partial(reasons.join('; '));
   }
 
-  sortSelect.addEventListener('change', () => { state.sortId = sortSelect.value; render(); });
+  sortSelect.addEventListener('change', () => {
+    state.sortId = sortSelect.value;
+    onSortChange?.(state.sortId);
+    render();
+  });
   areaBox.addEventListener('change', () => { state.onlyInMap = areaBox.checked; render(); });
   refreshBtn.addEventListener('click', () => onRefresh());
   cancelBtn.addEventListener('click', () => onCancel());
@@ -118,8 +134,11 @@ export function createOverlay({ L, css, onRefresh, onCancel, onClose }) {
   };
 
   const api = {
+    isOpen() {
+      return host.style.display !== 'none';
+    },
     open() {
-      if (host.style.display !== 'none') return;
+      if (api.isOpen()) return;
       host.style.display = '';
       savedOverflow = document.documentElement.style.overflow;
       document.documentElement.style.overflow = 'hidden';
@@ -127,11 +146,16 @@ export function createOverlay({ L, css, onRefresh, onCancel, onClose }) {
       root.focus({ preventScroll: true });
     },
     close() {
-      if (host.style.display === 'none') return;
+      if (!api.isOpen()) return;
       host.style.display = 'none';
       document.documentElement.style.overflow = savedOverflow;
       window.removeEventListener('keydown', onKey, true);
       onClose();
+    },
+    // Removes the layer from the page; the instance must not be used afterwards.
+    destroy() {
+      api.close();
+      host.remove();
     },
     // title: the search being collected (the header may still show the previous one).
     showProgress(p, title) {
@@ -148,7 +172,7 @@ export function createOverlay({ L, css, onRefresh, onCancel, onClose }) {
       shownKey = ''; // new data: always re-render, even if the ids are the same
       sub.textContent = describeSearch(meta);
       setMode('results');
-      if (host.style.display !== 'none') list.el.focus({ preventScroll: true });
+      if (api.isOpen()) list.el.focus({ preventScroll: true });
       map ??= createMap(mapBox, {
         L,
         onMarkerHover: id => list.highlight(id),

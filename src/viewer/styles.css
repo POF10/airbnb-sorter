@@ -21,6 +21,8 @@
 .abs-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
 .abs-close { width: 36px; height: 36px; border: 0; border-radius: 50%; background: transparent; color: inherit; font-size: 26px; line-height: 1; cursor: pointer; }
 .abs-close:hover { background: #f2f2f2; }
+.abs-support { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; color: #e0245e; font-size: 18px; line-height: 1; text-decoration: none; }
+.abs-support:hover { background: #fdecef; }
 
 /* Progress / error */
 .abs-progress, .abs-error { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 24px; text-align: center; }
