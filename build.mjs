@@ -29,6 +29,8 @@ async function buildExtension() {
   await writeFile(`${out}/manifest.json`, `${JSON.stringify(buildManifest({ version: pkg.version }), null, 2)}\n`);
   for (const file of ['popup.html', 'popup.css']) await cp(`src/extension/${file}`, `${out}/${file}`);
   for (const dir of ['icons', '_locales']) await cp(`src/extension/${dir}`, `${out}/${dir}`, { recursive: true });
+  // Leaflet is bundled into content.js; its licence (BSD-2-Clause) asks for the notice to travel with the code.
+  await cp('node_modules/leaflet/LICENSE', `${out}/LEAFLET-LICENSE.txt`);
 
   // The zip holds the contents of dist/extension/ at its root, as the Web Store expects.
   const files = {};

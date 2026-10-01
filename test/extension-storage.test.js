@@ -24,15 +24,20 @@ test('chromeStorage reads a stored value and falls back when the key is absent',
 
 test('chromeStorage returns stored falsy values instead of the fallback', async () => {
   const storage = chromeStorage(fakeArea());
-  await storage.set('flag', false);
-  assert.equal(await storage.get('flag', true), false);
+  for (const value of [false, 0, '', null]) {
+    await storage.set('flag', value);
+    assert.equal(await storage.get('flag', 'fallback'), value);
+  }
 });
 
-test('chromeStorage passes failures on (an updated extension invalidates the context)', async () => {
-  const dead = { get: async () => { throw new Error('Extension context invalidated.'); }, set: async () => { throw new Error('Extension context invalidated.'); } };
-  const storage = chromeStorage(dead);
-  await assert.rejects(storage.get('settings', null), /invalidated/);
-  await assert.rejects(storage.set('settings', {}), /invalidated/);
+test('chromeStorage turns failures into rejections (an updated extension invalidates the context)', async () => {
+  const throwing = () => { throw new Error('Extension context invalidated.'); }; // what real Chrome does
+  const rejecting = async () => { throw new Error('Extension context invalidated.'); };
+  for (const dead of [{ get: throwing, set: throwing }, { get: rejecting, set: rejecting }]) {
+    const storage = chromeStorage(dead);
+    await assert.rejects(storage.get('settings', null), /invalidated/);
+    await assert.rejects(storage.set('settings', {}), /invalidated/);
+  }
 });
 
 test('onLocalChange fires only for the given key in the local area', () => {

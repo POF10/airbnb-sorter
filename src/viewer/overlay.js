@@ -155,6 +155,8 @@ export function createOverlay({ L, css, initialSort, supportUrl, onSortChange, o
     // Removes the layer from the page; the instance must not be used afterwards.
     destroy() {
       api.close();
+      map?.remove();
+      list.destroy();
       host.remove();
     },
     // title: the search being collected (the header may still show the previous one).

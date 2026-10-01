@@ -5,6 +5,8 @@ import { DOMAINS } from './domains.js';
 export const matchPattern = domain => `https://*.${domain}/*`;
 
 export function buildManifest({ version }) {
+  // Chrome accepts one to four dot-separated integers and refuses anything else ("0.3.0-beta.1").
+  if (!/^\d+(\.\d+){0,3}$/.test(version)) throw new Error(`the manifest version must be 1-4 dot-separated integers, got "${version}"`);
   return {
     manifest_version: 3,
     name: '__MSG_extName__',

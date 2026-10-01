@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { SETTINGS_KEY, LANGUAGES, DEFAULT_SETTINGS, normalizeSettings, loadSettings, saveSettings, resolveLocale } from '../src/settings.js';
-import { memoryStorage, asyncStorage, brokenStorage, rejectingStorage, quietly } from './helpers/storage.js';
+import { memoryStorage, asyncStorage, brokenStorage, rejectingStorage, captureWarnings } from './helpers/storage.js';
 
 test('defaults: automatic language, price descending', () => {
   assert.deepEqual(DEFAULT_SETTINGS, { language: 'auto', sort: 'price-desc' });
@@ -38,18 +38,19 @@ for (const [kind, makeStorage] of [['sync', memoryStorage], ['async', asyncStora
 }
 
 for (const [kind, broken] of [['throwing', brokenStorage], ['rejecting', rejectingStorage]]) {
-  test(`${kind} storage: loading gives the defaults, saving still returns the merged settings`, async () => {
-    await quietly(async () => {
+  test(`${kind} storage: loading gives the defaults, saving still returns the merged settings and logs the failure`, async () => {
+    const warnings = await captureWarnings(async () => {
       assert.deepEqual(await loadSettings(broken), DEFAULT_SETTINGS);
       assert.deepEqual(await saveSettings(broken, { language: 'ru' }), { language: 'ru', sort: 'price-desc' });
     });
+    assert.equal(warnings.length, 1);
   });
 }
 
 test('loadSettings returns a fresh object, not the frozen defaults', async () => {
   const settings = await loadSettings(brokenStorage);
-  settings.language = 'ru';
-  assert.equal(DEFAULT_SETTINGS.language, 'auto');
+  assert.notEqual(settings, DEFAULT_SETTINGS);
+  assert.ok(!Object.isFrozen(settings));
 });
 
 test('resolveLocale: auto asks the detector, an explicit language wins', () => {

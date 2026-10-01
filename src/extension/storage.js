@@ -7,7 +7,10 @@ export function chromeStorage(area) {
       const found = await area.get(key);
       return Object.hasOwn(found, key) ? found[key] : fallback;
     },
-    set: (key, value) => area.set({ [key]: value }),
+    // async, so a call on an invalidated extension context rejects like get() instead of throwing in place
+    async set(key, value) {
+      await area.set({ [key]: value });
+    },
   };
 }
 

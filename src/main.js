@@ -7,7 +7,7 @@ import { SUPPORT_LINKS } from './config.js';
 import { createLauncher } from './launcher.js';
 import { createOverlay } from './viewer/overlay.js';
 import { describeSearch } from './viewer/logic.js';
-import { setLocale, detectLocale } from './i18n.js';
+import { setLocale, getLocale, detectLocale } from './i18n.js';
 import css from './viewer/styles.css';
 
 async function fetchPage(url, signal) {
@@ -33,18 +33,20 @@ export async function start({ L, leafletCss, storage, onSettingsChange }) {
   applyLocale();
 
   let overlay = null;
-  let overlayStale = false; // built in a language that is no longer current
+  let overlayLocale = null; // the language the overlay was built in
   let controller = null;
   let running = false;
 
   function getOverlay() {
-    // Texts are set when the overlay is built, so a language change rebuilds it — but never under the user's hands.
-    if (overlay && overlayStale && !running && !overlay.isOpen()) {
+    // The overlay's controls get their texts when it is built, so after a language change it is rebuilt on its
+    // next opening — never while it is open or collecting. (Left open across a change, it keeps the old controls
+    // and shows newly rendered texts in the new language until then.)
+    if (overlay && overlayLocale !== getLocale() && !running && !overlay.isOpen()) {
       overlay.destroy();
       overlay = null;
     }
     if (!overlay) {
-      overlayStale = false;
+      overlayLocale = getLocale();
       overlay = createOverlay({
         L,
         css: `${leafletCss}\n${css}`,
@@ -73,8 +75,16 @@ export async function start({ L, leafletCss, storage, onSettingsChange }) {
     controller?.abort();
     const current = (controller = new AbortController());
 
+    // Shown before the cache read: with an async storage the overlay would otherwise sit there empty, or with
+    // the previous search, until the read ends.
+    view.showProgress(null, describeSearch({ placeLabel: placeLabel(searchUrl), searchUrl }));
     const cached = force ? null : await loadCache(storage, searchUrl);
     if (current !== controller) return; // another click took over while the cache was being read
+    if (current.signal.aborted) {
+      // Closed or cancelled during the read: nothing has been collected, so there is nothing to show.
+      view.close();
+      return;
+    }
     if (cached) {
       try {
         view.showResults(cached, { fromCache: true });
@@ -85,7 +95,6 @@ export async function start({ L, leafletCss, storage, onSettingsChange }) {
     }
 
     running = true;
-    view.showProgress(null, describeSearch({ placeLabel: placeLabel(searchUrl), searchUrl }));
     let result;
     try {
       result = await collect(href, {
@@ -110,12 +119,10 @@ export async function start({ L, leafletCss, storage, onSettingsChange }) {
   const launcher = createLauncher(() => run(false));
 
   onSettingsChange?.(async () => {
-    const previous = settings.language;
     settings = await loadSettings(storage);
-    if (settings.language === previous) return;
+    const previous = getLocale();
     applyLocale();
-    launcher.refreshLabel();
-    overlayStale = true;
+    if (getLocale() !== previous) launcher.refreshLabel();
   });
   return true;
 }

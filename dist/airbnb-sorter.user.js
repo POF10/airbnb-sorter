@@ -457,8 +457,8 @@
     }
   }
   async function saveCache(storage, searchUrl, { listings, meta }) {
-    const trimmed = listings.map((l) => l.photos?.length > MAX_PHOTOS ? { ...l, photos: l.photos.slice(0, MAX_PHOTOS) } : l);
     try {
+      const trimmed = listings.map((l) => l.photos?.length > MAX_PHOTOS ? { ...l, photos: l.photos.slice(0, MAX_PHOTOS) } : l);
       await storage.set(KEY, { v: VERSION, key: cacheKey(searchUrl), listings: trimmed, meta });
     } catch (e) {
       console.warn("[airbnb-sorter] could not save the cache", e);
@@ -562,6 +562,9 @@
   var locale = "en";
   function setLocale(next) {
     locale = Object.hasOwn(DICTS, next) ? next : "en";
+  }
+  function getLocale() {
+    return locale;
   }
   function t() {
     return DICTS[locale];
@@ -888,6 +891,9 @@
       highlight(id) {
         grid.querySelector(".abs-card--hl")?.classList.remove("abs-card--hl");
         if (id) grid.querySelector(`.abs-card[data-id="${id}"]`)?.classList.add("abs-card--hl");
+      },
+      destroy() {
+        observer.disconnect();
       }
     };
   }
@@ -925,10 +931,11 @@
       const bounds = L.latLngBounds([...markers.values()].map((m) => m.getLatLng()));
       map.fitBounds(bounds, { padding: [24, 24], maxZoom: 16, animate: false });
     }
-    new ResizeObserver(() => {
+    const resizeObserver = new ResizeObserver(() => {
       map.invalidateSize();
       if (pendingFit) fitAll();
-    }).observe(container);
+    });
+    resizeObserver.observe(container);
     return {
       setListings(listings) {
         layer.clearLayers();
@@ -977,7 +984,12 @@
       invalidateSize() {
         map.invalidateSize();
       },
-      fitAll
+      fitAll,
+      // Leaflet listens on window (resize) until the map is removed.
+      remove() {
+        resizeObserver.disconnect();
+        map.remove();
+      }
     };
   }
 
@@ -1117,6 +1129,8 @@
       // Removes the layer from the page; the instance must not be used afterwards.
       destroy() {
         api.close();
+        map?.remove();
+        list3.destroy();
         host.remove();
       },
       // title: the search being collected (the header may still show the previous one).
@@ -1168,16 +1182,16 @@
     ));
     applyLocale();
     let overlay = null;
-    let overlayStale = false;
+    let overlayLocale = null;
     let controller = null;
     let running = false;
     function getOverlay() {
-      if (overlay && overlayStale && !running && !overlay.isOpen()) {
+      if (overlay && overlayLocale !== getLocale() && !running && !overlay.isOpen()) {
         overlay.destroy();
         overlay = null;
       }
       if (!overlay) {
-        overlayStale = false;
+        overlayLocale = getLocale();
         overlay = createOverlay({
           L,
           css: `${leafletCss}
@@ -1203,8 +1217,13 @@ ${styles_default}`,
       const { searchUrl } = parseSearchUrl(href);
       controller?.abort();
       const current = controller = new AbortController();
+      view.showProgress(null, describeSearch({ placeLabel: placeLabel(searchUrl), searchUrl }));
       const cached = force ? null : await loadCache(storage, searchUrl);
       if (current !== controller) return;
+      if (current.signal.aborted) {
+        view.close();
+        return;
+      }
       if (cached) {
         try {
           view.showResults(cached, { fromCache: true });
@@ -1214,7 +1233,6 @@ ${styles_default}`,
         }
       }
       running = true;
-      view.showProgress(null, describeSearch({ placeLabel: placeLabel(searchUrl), searchUrl }));
       let result;
       try {
         result = await collect(href, {
@@ -1238,12 +1256,10 @@ ${styles_default}`,
     }
     const launcher = createLauncher(() => run(false));
     onSettingsChange?.(async () => {
-      const previous = settings.language;
       settings = await loadSettings(storage);
-      if (settings.language === previous) return;
+      const previous = getLocale();
       applyLocale();
-      launcher.refreshLabel();
-      overlayStale = true;
+      if (getLocale() !== previous) launcher.refreshLabel();
     });
     return true;
   }

@@ -66,3 +66,10 @@ test('the popup has a label for every settings language', () => {
     for (const language of LANGUAGES) assert.equal(typeof t().popup.languages[language], 'string', `${locale}: ${language}`);
   }
 });
+
+test('the popup how-to quotes the launcher button exactly', () => {
+  for (const locale of ['en', 'ru']) {
+    setLocale(locale);
+    assert.ok(t().popup.howTo.includes(t().launcher), locale);
+  }
+});

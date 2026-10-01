@@ -15,12 +15,28 @@ test('the manifest is MV3 with the package version and only the storage permissi
   const manifest = buildManifest({ version: '1.2.3' });
   assert.equal(manifest.manifest_version, 3);
   assert.equal(manifest.version, '1.2.3');
+  assert.equal(manifest.minimum_chrome_version, '114');
   assert.deepEqual(manifest.permissions, ['storage']);
   assert.equal(manifest.host_permissions, undefined);
   assert.equal(manifest.background, undefined);
   assert.equal(manifest.default_locale, 'en');
   assert.equal(manifest.action.default_popup, 'popup.html');
   assert.equal(manifest.options_ui.page, 'popup.html');
+});
+
+test('a version Chrome would refuse is rejected at build time', () => {
+  assert.throws(() => buildManifest({ version: '0.3.0-beta.1' }), /version/);
+  assert.throws(() => buildManifest({ version: '' }), /version/);
+  assert.equal(buildManifest({ version: '1.2.3.4' }).version, '1.2.3.4');
+});
+
+test('every __MSG_name__ in the manifest is defined in both locales', async () => {
+  const names = [...JSON.stringify(buildManifest({ version: '1.2.3' })).matchAll(/__MSG_(\w+?)__/g)].map(m => m[1]);
+  assert.ok(names.length >= 3);
+  for (const locale of ['en', 'ru']) {
+    const messages = await readJson(`../src/extension/_locales/${locale}/messages.json`);
+    for (const name of names) assert.equal(typeof messages[name]?.message, 'string', `${locale}: ${name}`);
+  }
 });
 
 test('one content script on every Airbnb domain, top frame only', () => {

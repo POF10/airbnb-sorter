@@ -18,7 +18,7 @@ The interface is in English, or in Russian on Russian-language Airbnb pages; the
 
 ## Installation
 
-There are two ways to install it. Both give the same button and the same result; pick one (with both installed the button still appears once).
+There are two ways to install it. Both give the same button and the same result; pick one. With both installed the button still appears only once, but whichever starts first is the one that runs, and the extension's settings apply only when it is the extension — so keep just one of them enabled.
 
 ### Option 1: Chrome extension
 

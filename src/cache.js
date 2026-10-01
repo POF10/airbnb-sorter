@@ -29,8 +29,8 @@ export async function loadCache(storage, searchUrl) {
 }
 
 export async function saveCache(storage, searchUrl, { listings, meta }) {
-  const trimmed = listings.map(l => (l.photos?.length > MAX_PHOTOS ? { ...l, photos: l.photos.slice(0, MAX_PHOTOS) } : l));
   try {
+    const trimmed = listings.map(l => (l.photos?.length > MAX_PHOTOS ? { ...l, photos: l.photos.slice(0, MAX_PHOTOS) } : l));
     await storage.set(KEY, { v: VERSION, key: cacheKey(searchUrl), listings: trimmed, meta });
   } catch (e) {
     console.warn('[airbnb-sorter] could not save the cache', e);

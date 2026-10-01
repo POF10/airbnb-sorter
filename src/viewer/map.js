@@ -44,10 +44,11 @@ export function createMap(container, { L, onMarkerHover, onMoveEnd }) {
   }
 
   // Leaflet only reacts to window resizes; the header wrapping and the list/map switch resize the container too.
-  new ResizeObserver(() => {
+  const resizeObserver = new ResizeObserver(() => {
     map.invalidateSize();
     if (pendingFit) fitAll();
-  }).observe(container);
+  });
+  resizeObserver.observe(container);
 
   return {
     setListings(listings) {
@@ -94,5 +95,10 @@ export function createMap(container, { L, onMarkerHover, onMoveEnd }) {
       map.invalidateSize();
     },
     fitAll,
+    // Leaflet listens on window (resize) until the map is removed.
+    remove() {
+      resizeObserver.disconnect();
+      map.remove();
+    },
   };
 }

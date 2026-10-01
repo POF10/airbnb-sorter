@@ -50,5 +50,8 @@ export function createList({ onHover }) {
       grid.querySelector('.abs-card--hl')?.classList.remove('abs-card--hl');
       if (id) grid.querySelector(`.abs-card[data-id="${id}"]`)?.classList.add('abs-card--hl');
     },
+    destroy() {
+      observer.disconnect();
+    },
   };
 }

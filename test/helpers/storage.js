@@ -26,13 +26,15 @@ export const rejectingStorage = {
   set: async () => { throw new Error('quota'); },
 };
 
-// Runs fn with console.warn silenced.
-export async function quietly(fn) {
+// Runs fn with console.warn captured instead of printed; resolves to the captured calls (one argument array each).
+export async function captureWarnings(fn) {
   const warn = console.warn;
-  console.warn = () => {};
+  const calls = [];
+  console.warn = (...args) => { calls.push(args); };
   try {
-    return await fn();
+    await fn();
   } finally {
     console.warn = warn;
   }
+  return calls;
 }

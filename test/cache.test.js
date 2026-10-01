@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadCache, saveCache, cacheKey } from '../src/cache.js';
-import { memoryStorage, asyncStorage, brokenStorage, rejectingStorage, quietly } from './helpers/storage.js';
+import { memoryStorage, asyncStorage, brokenStorage, rejectingStorage, captureWarnings } from './helpers/storage.js';
 
 const URL_A = 'https://www.airbnb.com/s/Riga--Latvia/homes?adults=2';
 const URL_B = 'https://www.airbnb.com/s/Riga--Latvia/homes?adults=3';
@@ -38,7 +38,7 @@ for (const [kind, makeStorage] of [['sync', memoryStorage], ['async', asyncStora
 
   test(`${kind} storage: a cache written by another version is ignored`, async () => {
     const storage = makeStorage();
-    await storage.set('lastCollection', { key: cacheKey(URL_A), listings: [{ id: '1' }], meta: {} });
+    await storage.set('lastCollection', { v: 0, key: cacheKey(URL_A), listings: [{ id: '1' }], meta: collection.meta });
     assert.equal(await loadCache(storage, URL_A), null);
   });
 
@@ -50,13 +50,23 @@ for (const [kind, makeStorage] of [['sync', memoryStorage], ['async', asyncStora
 }
 
 for (const [kind, broken] of [['throwing', brokenStorage], ['rejecting', rejectingStorage]]) {
-  test(`${kind} storage: failures are swallowed`, async () => {
-    await quietly(async () => {
+  test(`${kind} storage: failures are swallowed, the failed write is logged`, async () => {
+    const warnings = await captureWarnings(async () => {
       await assert.doesNotReject(saveCache(broken, URL_A, collection));
       assert.equal(await loadCache(broken, URL_A), null);
     });
+    assert.equal(warnings.length, 1);
   });
 }
+
+test('a collection that cannot be prepared for the cache is logged, not thrown', async () => {
+  const storage = memoryStorage();
+  const warnings = await captureWarnings(async () => {
+    await assert.doesNotReject(saveCache(storage, URL_A, { listings: [null], meta: collection.meta }));
+  });
+  assert.equal(warnings.length, 1);
+  assert.equal(await loadCache(storage, URL_A), null);
+});
 
 test('tracking params and parameter order do not change the cache key', () => {
   assert.equal(
