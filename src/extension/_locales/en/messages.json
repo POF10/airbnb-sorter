@@ -1,0 +1,8 @@
+{
+  "extName": {
+    "message": "Price Sorter for Airbnb"
+  },
+  "extDescription": {
+    "message": "Sort Airbnb search results by price: collects the whole search, past the 270-listing cap, and shows it with photos and a map."
+  }
+}
