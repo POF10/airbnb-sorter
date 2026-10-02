@@ -10,6 +10,31 @@ export const SORTS = {
 };
 export const DEFAULT_SORT = 'price-desc';
 
+// Thresholds offered by the rating and review filters; 0 means "any".
+export const RATING_STEPS = [0, 4.5, 4.7, 4.8, 4.9];
+export const REVIEW_STEPS = [0, 5, 20, 50, 100];
+export const NO_FILTERS = Object.freeze({ minRating: 0, minReviews: 0, hideViewed: false });
+
+export function hasActiveFilters({ minRating, minReviews, hideViewed }) {
+  return minRating > 0 || minReviews > 0 || hideViewed;
+}
+
+// A listing without a rating ("New") fails any rating threshold; one without a review count fails any review threshold.
+export function passesFilters(listing, { minRating, minReviews, hideViewed }, isViewed = () => false) {
+  if (minRating > 0 && !(listing.rating != null && listing.rating >= minRating)) return false;
+  if (minReviews > 0 && !(listing.reviews != null && listing.reviews >= minReviews)) return false;
+  return !(hideViewed && isViewed(listing.id));
+}
+
+export function filterListings(listings, filters, isViewed) {
+  return listings.filter(listing => passesFilters(listing, filters, isViewed));
+}
+
+// How many listings each step of one filter would leave while the other filters stay as they are.
+export function thresholdCounts(listings, filters, key, steps, isViewed) {
+  return steps.map(step => filterListings(listings, { ...filters, [key]: step }, isViewed).length);
+}
+
 const byId = (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
 // Sorted copy; listings without a key go last in either direction; ties go by `then`, then by id.
@@ -43,11 +68,12 @@ function formatter(kind) {
   return formatters.get(key);
 }
 const count = n => formatter('number').format(n);
+export const formatCount = count;
 
 // Symbols stick to the number ("€1 234"), letter codes get a no-break space ("CHF 1 234").
 export function formatMoney(amount, currency) {
   if (amount == null) return '—';
-  const gap = /\p{L}$/u.test(currency ?? '') ? '\u00a0' : '';
+  const gap = /\p{L}$/u.test(currency ?? '') ? ' ' : '';
   return `${currency ?? ''}${gap}${count(amount)}`;
 }
 
@@ -69,7 +95,9 @@ export function photoUrl(url, width = 720) {
   }
 }
 
-// "Riga, Latvia · 16 Oct – 19 Oct · 2 guests"
+const MAP_BOUNDS = ['ne_lat', 'ne_lng', 'sw_lat', 'sw_lng'];
+
+// "Riga, Latvia · 16 Oct – 19 Oct · 2 guests", plus "· map area" for a search by map bounds
 export function describeSearch({ placeLabel, searchUrl }) {
   const params = new URL(searchUrl).searchParams;
   const parts = [placeLabel];
@@ -80,6 +108,8 @@ export function describeSearch({ placeLabel, searchUrl }) {
   }
   const guests = Number(params.get('adults') || 0) + Number(params.get('children') || 0);
   if (guests) parts.push(t().guests(guests));
+  // The search was limited to a map rectangle on Airbnb, so this is not the whole place.
+  if (MAP_BOUNDS.every(key => params.has(key))) parts.push(t().mapArea);
   return parts.filter(Boolean).join(' · ');
 }
 

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   SORTS, DEFAULT_SORT, sortListings, filterByBounds, formatMoney, formatRating, photoUrl,
+  RATING_STEPS, REVIEW_STEPS, NO_FILTERS, hasActiveFilters, passesFilters, filterListings, thresholdCounts, formatCount,
   describeSearch, formatAge, summaryText, partialReasons, progressText,
 } from '../src/viewer/logic.js';
 import { setLocale } from '../src/i18n.js';
@@ -132,4 +133,70 @@ test('describeSearch: plurals, children count as guests, invalid dates are skipp
 
 test('partialReasons mentions the request limit', () => {
   assert.deepEqual(partialReasons({ stopReason: 'limit', failedPages: 0, saturatedRanges: 0 }), ['достигнут предел числа запросов']);
+});
+
+// --- filters ---
+
+const rated = [
+  make('a', 100, 4.95, 120),
+  make('b', 200, 4.8, 19),
+  make('c', 300, 4.79, 300),
+  make('d', 400, null, null), // "New": no rating, no reviews
+  make('e', 500, 4.5, 5),
+  make('f', 600, 5, null), // a rating without a review count
+];
+
+test('filter thresholds and the empty filter set', () => {
+  assert.deepEqual(RATING_STEPS, [0, 4.5, 4.7, 4.8, 4.9]);
+  assert.deepEqual(REVIEW_STEPS, [0, 5, 20, 50, 100]);
+  assert.deepEqual(NO_FILTERS, { minRating: 0, minReviews: 0, hideViewed: false });
+  assert.ok(Object.isFrozen(NO_FILTERS));
+});
+
+test('hasActiveFilters', () => {
+  assert.equal(hasActiveFilters(NO_FILTERS), false);
+  assert.equal(hasActiveFilters({ ...NO_FILTERS, minRating: 4.5 }), true);
+  assert.equal(hasActiveFilters({ ...NO_FILTERS, minReviews: 5 }), true);
+  assert.equal(hasActiveFilters({ ...NO_FILTERS, hideViewed: true }), true);
+});
+
+test('no filters keep everything, including listings without a rating', () => {
+  assert.deepEqual(ids(filterListings(rated, NO_FILTERS)), ['a', 'b', 'c', 'd', 'e', 'f']);
+});
+
+test('a rating threshold is inclusive and drops listings without a rating', () => {
+  assert.deepEqual(ids(filterListings(rated, { ...NO_FILTERS, minRating: 4.8 })), ['a', 'b', 'f']);
+  assert.deepEqual(ids(filterListings(rated, { ...NO_FILTERS, minRating: 4.5 })), ['a', 'b', 'c', 'e', 'f']);
+});
+
+test('a review threshold is inclusive and drops listings without a review count', () => {
+  assert.deepEqual(ids(filterListings(rated, { ...NO_FILTERS, minReviews: 5 })), ['a', 'b', 'c', 'e']);
+  assert.deepEqual(ids(filterListings(rated, { ...NO_FILTERS, minReviews: 20 })), ['a', 'c']);
+});
+
+test('filters combine, and viewed listings are hidden only when asked', () => {
+  const isViewed = id => id === 'a';
+  assert.deepEqual(ids(filterListings(rated, { minRating: 4.7, minReviews: 20, hideViewed: false }, isViewed)), ['a', 'c']);
+  assert.deepEqual(ids(filterListings(rated, { minRating: 4.7, minReviews: 20, hideViewed: true }, isViewed)), ['c']);
+  assert.equal(passesFilters(rated[0], { ...NO_FILTERS, hideViewed: true }), true); // without isViewed nothing is viewed
+});
+
+test('thresholdCounts: what each step of one filter would leave, the others unchanged', () => {
+  assert.deepEqual(thresholdCounts(rated, NO_FILTERS, 'minRating', RATING_STEPS), [6, 5, 4, 3, 2]);
+  assert.deepEqual(thresholdCounts(rated, NO_FILTERS, 'minReviews', REVIEW_STEPS), [6, 4, 2, 2, 2]);
+  // with "20+ reviews" on, the rating menu counts only listings that also have 20+ reviews
+  assert.deepEqual(thresholdCounts(rated, { ...NO_FILTERS, minReviews: 20 }, 'minRating', RATING_STEPS), [2, 2, 2, 1, 1]);
+  // hidden viewed listings are not counted either
+  assert.deepEqual(thresholdCounts(rated, { ...NO_FILTERS, hideViewed: true }, 'minRating', RATING_STEPS, id => id === 'a'), [5, 4, 3, 2, 1]);
+});
+
+test('formatCount groups digits in the current language', () => {
+  assert.match(formatCount(1295), /^1\s295$/);
+});
+
+test('describeSearch says when the search was limited to a map area', () => {
+  const bounds = 'ne_lat=57.1&ne_lng=24.3&sw_lat=56.9&sw_lng=23.9';
+  assert.equal(describeSearch({ placeLabel: 'Riga, Latvia', searchUrl: `https://www.airbnb.com/s/Riga--Latvia/homes?adults=2&${bounds}` }), 'Riga, Latvia · 2 гостя · область карты');
+  assert.equal(describeSearch({ placeLabel: null, searchUrl: `https://www.airbnb.com/s/homes?${bounds}` }), 'область карты');
+  assert.equal(describeSearch({ placeLabel: 'X', searchUrl: 'https://www.airbnb.com/s/X/homes?ne_lat=57.1&ne_lng=24.3' }), 'X'); // incomplete bounds
 });
