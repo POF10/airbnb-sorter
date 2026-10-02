@@ -10,6 +10,8 @@ The interface is in English, or in Russian on Russian-language Airbnb pages; the
 
 - **The whole search, not 270 listings.** The search is split into price ranges until each one fits under Airbnb's limit, then every range is collected in full.
 - **Sorting:** price descending (default) and ascending, rating, number of reviews.
+- **Filters Airbnb lacks:** minimum rating and minimum number of reviews, with a count next to every option.
+- **Viewed marks:** listings you have already opened are dimmed in the list and grey on the map, and can be hidden.
 - **A map** with price pins, like Airbnb's: hovering a card highlights its pin, clicking a pin opens a mini card. An "Only in map area" filter.
 - **Cards like Airbnb's:** photo carousel, "Guest favorite" badge, rating, discounts with the old price struck through, and an "≈ per night" price.
 - **All your filters apply:** dates, guests, property type, bedrooms, amenities, price range, map area. Works on www.airbnb.com and on the language sites (airbnb.co.uk, lv.airbnb.com, ru.airbnb.com, …).
@@ -63,6 +65,8 @@ If the link shows plain text instead of the Install page, step 2 has not been do
 3. Wait for the collection to finish. For ~1,300 listings it takes about 45 seconds and 60 MB of traffic (Airbnb serves whole search pages, ~750 KB each). The progress is shown while it runs.
 
 From there everything works like Airbnb: cards open the listing in a new tab with your dates, the map can be dragged and zoomed, "Only in map area" keeps only what is visible on the map. Esc or × closes the overlay.
+
+The overlay shows what your Airbnb search found — its dates, filters and map area — and does not load new areas when you move its map. To look somewhere else, move the map on Airbnb and press the button again.
 
 What the header says:
 
@@ -118,14 +122,15 @@ Layout:
 | `src/cache.js` | cache of the last collection |
 | `src/i18n.js` | UI texts (English, Russian) |
 | `src/viewer/` | the overlay in a Shadow DOM: cards, list, map (Leaflet + OpenStreetMap), sorting |
-| `src/settings.js` | settings: language, last sort order |
+| `src/settings.js` | settings: language, last sort order, filters |
+| `src/viewed.js` | the listings the user has opened |
 | `src/config.js` | project and support links |
 | `src/launcher.js`, `src/guard.js`, `src/main.js` | the on-page button, the one-instance-per-page guard and the wiring |
 | `src/userscript.js`, `dev/inject.js`, `src/extension/content.js` | entry points: Tampermonkey, the console, the Chrome extension |
 | `src/extension/` | the rest of the extension: manifest, domain list, `chrome.storage` adapter, popup, icons, names |
 | `scripts/make-icons.mjs` | draws the extension icons |
 
-Releasing: bump `version` in `package.json`, `npm run build`, commit the rebuilt `dist/airbnb-sorter.user.js` (it is the install/update URL of the userscript) and create a GitHub release named `v<version>` with `dist/airbnb-sorter.user.js` and `dist/airbnb-sorter-extension-<version>.zip` attached. Installed userscripts update themselves from the committed file; the same zip is what gets uploaded to the Chrome Web Store. The build warns while `src/config.js` still has placeholder support links: do not release with them.
+Releasing: bump `version` in `package.json`, `npm run build`, commit the rebuilt `dist/airbnb-sorter.user.js` (it is the install/update URL of the userscript) and create a GitHub release named `v<version>` with `dist/airbnb-sorter.user.js` and `dist/airbnb-sorter-extension-<version>.zip` attached. Installed userscripts update themselves from the committed file; the same zip is what gets uploaded to the Chrome Web Store. The build warns while `src/config.js` still has placeholder support links: do not release with them. Every release gets an entry in [CHANGELOG.md](CHANGELOG.md); the GitHub release notes are taken from it.
 
 Requires Node.js 22+.
 

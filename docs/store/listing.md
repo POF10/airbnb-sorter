@@ -18,15 +18,17 @@ Airbnb search cannot sort by price, and it shows at most 270 listings per search
 
 • The whole search, not 270 listings: the search is split into price ranges until each one fits under Airbnb's limit.
 • All your filters apply: dates, guests, property type, amenities, price range, map area.
+• Filters Airbnb lacks: minimum rating and minimum number of reviews.
+• Listings you have already opened are marked and can be hidden.
 • A map with price pins and an "Only in map area" filter.
 • Cards like Airbnb's: photo carousel, rating, discounts, price per night.
 • The last collection is cached, so reopening the same search is instant.
 • Gentle with Airbnb: a few requests at a time with pauses, and it stops at the first sign of blocking.
 • English and Russian interface.
 
-How to use: open a homes search on Airbnb, set dates and filters as usual, then press "↕ Sort all" in the bottom-right corner. Collecting about 1,300 listings takes around 45 seconds.
+How to use: open a homes search on Airbnb, set dates and filters as usual, then press "↕ Sort all" in the bottom-right corner. Collecting about 1,300 listings takes around 45 seconds. The extension sorts what your Airbnb search found and does not load new areas by itself: to look elsewhere, move the map on Airbnb and press the button again.
 
-Nothing leaves your browser: no account, no analytics, no server. Open source (MIT): https://github.com/POF10/airbnb-sorter
+Completely free: no ads and no paid features. Nothing leaves your browser: no account, no analytics, no server. Open source (MIT): https://github.com/POF10/airbnb-sorter
 
 This extension is not affiliated with, endorsed by or sponsored by Airbnb. Airbnb's terms of service prohibit automated data collection; use it at your own risk.
 ```
@@ -38,15 +40,17 @@ This extension is not affiliated with, endorsed by or sponsored by Airbnb. Airbn
 
 • Вся выдача, а не 270 объявлений: поиск делится на ценовые диапазоны, пока каждый не уложится в лимит Airbnb.
 • Учитываются все ваши фильтры: даты, гости, тип жилья, удобства, ценовой диапазон, область карты.
+• Фильтры, которых нет в Airbnb: минимальный рейтинг и минимальное число отзывов.
+• Объявления, которые вы уже открывали, отмечены, и их можно скрыть.
 • Карта с ценниками и фильтр «Только в области карты».
 • Карточки как на Airbnb: карусель фото, рейтинг, скидки, цена за ночь.
 • Последний сбор запоминается: тот же поиск открывается мгновенно.
 • Бережно к Airbnb: несколько запросов одновременно с паузами и остановка при первых признаках блокировки.
 • Интерфейс на русском и английском.
 
-Как пользоваться: откройте поиск жилья на Airbnb, задайте даты и фильтры как обычно и нажмите «↕ Сортировать все» в правом нижнем углу. Сбор примерно 1 300 объявлений занимает около 45 секунд.
+Как пользоваться: откройте поиск жилья на Airbnb, задайте даты и фильтры как обычно и нажмите «↕ Сортировать все» в правом нижнем углу. Сбор примерно 1 300 объявлений занимает около 45 секунд. Расширение сортирует то, что нашёл ваш поиск на Airbnb, и само новые районы не подгружает: чтобы посмотреть другое место, передвиньте карту на Airbnb и нажмите кнопку ещё раз.
 
-Ничего не покидает ваш браузер: нет учётной записи, аналитики и сервера. Открытый исходный код (MIT): https://github.com/POF10/airbnb-sorter
+Полностью бесплатно: без рекламы и платных функций. Ничего не покидает ваш браузер: нет учётной записи, аналитики и сервера. Открытый исходный код (MIT): https://github.com/POF10/airbnb-sorter
 
 Расширение не связано с Airbnb, не одобрено и не спонсируется Airbnb. Пользовательское соглашение Airbnb запрещает автоматический сбор данных; используйте на свой страх и риск.
 ```
@@ -55,7 +59,7 @@ This extension is not affiliated with, endorsed by or sponsored by Airbnb. Airbn
 
 **Single purpose.** Sorting the results of an Airbnb search by price: the extension collects the whole search the user is looking at and shows it sorted, with photos and a map.
 
-**Permission justification — storage.** Keeps the last collected search, so reopening the same search does not repeat the requests, and the user's settings (interface language, sort order). Stored locally in `chrome.storage.local`, never synced or sent anywhere.
+**Permission justification — storage.** Keeps the last collected search, so reopening the same search does not repeat the requests, the user's settings (interface language, sort order, filters) and the list of listings the user has opened, which are marked as viewed. Stored locally in `chrome.storage.local`, never synced or sent anywhere.
 
 **Permission justification — host permissions (Airbnb domains).** The content script runs only on Airbnb's own domains (airbnb.com and its country domains). It adds the "↕ Sort all" button to the search page and, when the user presses it, requests the pages of that search from the same Airbnb site in the user's session. It runs on every page of those sites because Airbnb is a single-page application and reaches the search page without a page load. No other site is accessed.
 
