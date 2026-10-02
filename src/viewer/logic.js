@@ -73,7 +73,7 @@ export const formatCount = count;
 // Symbols stick to the number ("€1 234"), letter codes get a no-break space ("CHF 1 234").
 export function formatMoney(amount, currency) {
   if (amount == null) return '—';
-  const gap = /\p{L}$/u.test(currency ?? '') ? ' ' : '';
+  const gap = /\p{L}$/u.test(currency ?? '') ? '\u00a0' : '';
   return `${currency ?? ''}${gap}${count(amount)}`;
 }
 
