@@ -1,6 +1,6 @@
 {
   "name": "airbnb-sorter",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "Tampermonkey userscript: collects a whole Airbnb search (past the 270-listing cap) and shows it sortable by price, with photos and a map",
   "author": "POF10",

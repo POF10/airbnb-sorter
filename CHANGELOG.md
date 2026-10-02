@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] - 2026-10-02
+
+### Fixed
+
+- Dragging the map no longer selects the text of the note on it.
+
 ## [0.3.0] - 2026-10-02
 
 ### Added
@@ -37,6 +43,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - First release: a Tampermonkey userscript that collects a whole Airbnb homes search past the 270-listing cap by splitting it into price ranges, and shows it sortable by price, rating or number of reviews, with photos and a map.
 - English and Russian interface; the last collection is cached.
 
+[0.3.1]: https://github.com/POF10/airbnb-sorter/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/POF10/airbnb-sorter/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/POF10/airbnb-sorter/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/POF10/airbnb-sorter/releases/tag/v0.1.0
