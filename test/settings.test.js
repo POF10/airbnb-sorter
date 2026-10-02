@@ -3,18 +3,30 @@ import assert from 'node:assert/strict';
 import { SETTINGS_KEY, LANGUAGES, DEFAULT_SETTINGS, normalizeSettings, loadSettings, saveSettings, resolveLocale } from '../src/settings.js';
 import { memoryStorage, asyncStorage, brokenStorage, rejectingStorage, captureWarnings } from './helpers/storage.js';
 
-test('defaults: automatic language, price descending', () => {
-  assert.deepEqual(DEFAULT_SETTINGS, { language: 'auto', sort: 'price-desc' });
+const withDefaults = patch => ({ ...DEFAULT_SETTINGS, ...patch });
+
+test('defaults: automatic language, price descending, no filters, map hint not seen', () => {
+  assert.deepEqual(DEFAULT_SETTINGS, { language: 'auto', sort: 'price-desc', minRating: 0, minReviews: 0, hideViewed: false, mapHintSeen: false });
   assert.deepEqual(LANGUAGES, ['auto', 'en', 'ru']);
 });
 
 test('normalizeSettings keeps known values and replaces everything else with the defaults', () => {
-  assert.deepEqual(normalizeSettings({ language: 'ru', sort: 'rating-desc' }), { language: 'ru', sort: 'rating-desc' });
+  assert.deepEqual(normalizeSettings({ language: 'ru', sort: 'rating-desc' }), withDefaults({ language: 'ru', sort: 'rating-desc' }));
   assert.deepEqual(normalizeSettings({ language: 'de', sort: 'cheapest' }), DEFAULT_SETTINGS);
-  assert.deepEqual(normalizeSettings({ language: 'en' }), { language: 'en', sort: 'price-desc' });
+  assert.deepEqual(normalizeSettings({ language: 'en' }), withDefaults({ language: 'en' }));
   assert.deepEqual(normalizeSettings({ sort: 'toString' }), DEFAULT_SETTINGS); // inherited names are not sorts
-  assert.deepEqual(normalizeSettings({ language: 'ru', extra: 1 }), { language: 'ru', sort: 'price-desc' });
+  assert.deepEqual(normalizeSettings({ language: 'ru', extra: 1 }), withDefaults({ language: 'ru' }));
   for (const junk of [null, undefined, 'ru', 42, []]) assert.deepEqual(normalizeSettings(junk), DEFAULT_SETTINGS);
+});
+
+test('normalizeSettings accepts only the offered filter thresholds and real booleans', () => {
+  assert.deepEqual(
+    normalizeSettings({ minRating: 4.8, minReviews: 20, hideViewed: true, mapHintSeen: true }),
+    withDefaults({ minRating: 4.8, minReviews: 20, hideViewed: true, mapHintSeen: true }),
+  );
+  assert.deepEqual(normalizeSettings({ minRating: 4.6, minReviews: 7 }), DEFAULT_SETTINGS); // not on the list
+  assert.deepEqual(normalizeSettings({ minRating: '4.8', minReviews: '20' }), DEFAULT_SETTINGS); // strings are not thresholds
+  assert.deepEqual(normalizeSettings({ hideViewed: 'yes', mapHintSeen: 1 }), DEFAULT_SETTINGS);
 });
 
 for (const [kind, makeStorage] of [['sync', memoryStorage], ['async', asyncStorage]]) {
@@ -24,10 +36,12 @@ for (const [kind, makeStorage] of [['sync', memoryStorage], ['async', asyncStora
 
   test(`${kind} storage: saveSettings merges the patch into what is stored`, async () => {
     const storage = makeStorage();
-    assert.deepEqual(await saveSettings(storage, { language: 'ru' }), { language: 'ru', sort: 'price-desc' });
-    assert.deepEqual(await saveSettings(storage, { sort: 'price-asc' }), { language: 'ru', sort: 'price-asc' });
-    assert.deepEqual(await loadSettings(storage), { language: 'ru', sort: 'price-asc' });
-    assert.deepEqual(await storage.get(SETTINGS_KEY, null), { language: 'ru', sort: 'price-asc' });
+    assert.deepEqual(await saveSettings(storage, { language: 'ru' }), withDefaults({ language: 'ru' }));
+    assert.deepEqual(await saveSettings(storage, { sort: 'price-asc' }), withDefaults({ language: 'ru', sort: 'price-asc' }));
+    const filters = { minRating: 4.9, minReviews: 50, hideViewed: true };
+    assert.deepEqual(await saveSettings(storage, filters), withDefaults({ language: 'ru', sort: 'price-asc', ...filters }));
+    assert.deepEqual(await loadSettings(storage), withDefaults({ language: 'ru', sort: 'price-asc', ...filters }));
+    assert.deepEqual(await storage.get(SETTINGS_KEY, null), withDefaults({ language: 'ru', sort: 'price-asc', ...filters }));
   });
 
   test(`${kind} storage: an invalid patch value falls back to the default`, async () => {
@@ -41,7 +55,7 @@ for (const [kind, broken] of [['throwing', brokenStorage], ['rejecting', rejecti
   test(`${kind} storage: loading gives the defaults, saving still returns the merged settings and logs the failure`, async () => {
     const warnings = await captureWarnings(async () => {
       assert.deepEqual(await loadSettings(broken), DEFAULT_SETTINGS);
-      assert.deepEqual(await saveSettings(broken, { language: 'ru' }), { language: 'ru', sort: 'price-desc' });
+      assert.deepEqual(await saveSettings(broken, { language: 'ru' }), withDefaults({ language: 'ru' }));
     });
     assert.equal(warnings.length, 1);
   });
