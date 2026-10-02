@@ -1,13 +1,15 @@
-import { el } from './dom.js';
+import { el, button } from './dom.js';
 import { createCard } from './card.js';
 import { formatMoney } from './logic.js';
 
 // More pins than this in view -> pins shrink to dots (price shows on hover).
 const DENSE_LIMIT = 150;
 
-// Leaflet map with Airbnb-style price pins. `L` is the Leaflet global. The map always shows every
-// collected listing; filtering the list by the visible area is the overlay's job.
-export function createMap(container, { L, onMarkerHover, onMoveEnd }) {
+// Leaflet map with Airbnb-style price pins. `L` is Leaflet. The map shows the listings it is given;
+// which ones those are (filters) and what the list does with the visible area is the overlay's job.
+//   isViewed(id) — already opened listings get a grey pin;
+//   onUserMove() — the user dragged or zoomed the map (not a fit, not a resize).
+export function createMap(container, { L, onMarkerHover, onMoveEnd, onUserMove = () => {}, isViewed = () => false }) {
   const map = L.map(container, { zoomControl: true }).setView([0, 0], 2);
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
@@ -31,6 +33,7 @@ export function createMap(container, { L, onMarkerHover, onMoveEnd }) {
 
   // A hidden (0×0) map cannot be fitted; the fit then waits for the container to get a size.
   let pendingFit = false;
+  let fitting = false;
   function fitAll() {
     if (markers.size === 0) return;
     const size = map.getSize();
@@ -40,8 +43,14 @@ export function createMap(container, { L, onMarkerHover, onMoveEnd }) {
     }
     pendingFit = false;
     const bounds = L.latLngBounds([...markers.values()].map(m => m.getLatLng()));
+    fitting = true;
     map.fitBounds(bounds, { padding: [24, 24], maxZoom: 16, animate: false });
+    fitting = false;
   }
+
+  // Dragging is always the user; zooming is the user unless it comes from our own fit.
+  map.on('dragstart', () => onUserMove());
+  map.on('zoomstart', () => { if (!fitting) onUserMove(); });
 
   // Leaflet only reacts to window resizes; the header wrapping and the list/map switch resize the container too.
   const resizeObserver = new ResizeObserver(() => {
@@ -50,8 +59,11 @@ export function createMap(container, { L, onMarkerHover, onMoveEnd }) {
   });
   resizeObserver.observe(container);
 
+  let hintShown = false;
+
   return {
-    setListings(listings) {
+    // fit: false keeps the current view (a filter changed); true fits the view to the new pins.
+    setListings(listings, { fit = true } = {}) {
       layer.clearLayers();
       markers.clear();
       highlighted = null;
@@ -59,20 +71,24 @@ export function createMap(container, { L, onMarkerHover, onMoveEnd }) {
         if (listing.lat == null || listing.lng == null) continue;
         const label = el('span', 'abs-pin-label', formatMoney(listing.price.amount, listing.price.currency));
         const marker = L.marker([listing.lat, listing.lng], {
-          icon: L.divIcon({ className: 'abs-pin', html: label, iconSize: null }),
+          icon: L.divIcon({ className: isViewed(listing.id) ? 'abs-pin abs-pin--viewed' : 'abs-pin', html: label, iconSize: null }),
           riseOnHover: true,
           keyboard: false,
         });
         marker.on('mouseover', () => onMarkerHover(listing.id));
         marker.on('mouseout', () => onMarkerHover(null));
-        marker.bindPopup(() => createCard(listing, { compact: true }), {
+        marker.bindPopup(() => createCard(listing, { compact: true, viewed: isViewed(listing.id) }), {
           className: 'abs-popup', closeButton: false, minWidth: 260, maxWidth: 260, offset: [0, -12],
         });
         marker.addTo(layer);
         markers.set(listing.id, marker);
       }
-      fitAll();
+      if (fit) fitAll();
       updateDensity();
+    },
+    // Re-reads the viewed state of the pins on the map.
+    refreshViewed() {
+      for (const [id, marker] of markers) marker.getElement()?.classList.toggle('abs-pin--viewed', isViewed(id));
     },
     highlight(id) {
       const previous = highlighted && markers.get(highlighted);
@@ -86,6 +102,28 @@ export function createMap(container, { L, onMarkerHover, onMoveEnd }) {
         marker.getElement()?.classList.add('abs-pin--hl');
         marker.setZIndexOffset(10000);
       }
+    },
+    // A note at the bottom of the map with a close button; shown at most once per map.
+    showHint(text, closeLabel, onDismiss) {
+      if (hintShown) return;
+      hintShown = true;
+      const control = L.control({ position: 'bottomleft' });
+      control.onAdd = () => {
+        const box = el('div', 'abs-map-hint');
+        const close = button('×', 'abs-map-hint-close');
+        close.title = closeLabel;
+        close.setAttribute('aria-label', closeLabel);
+        close.addEventListener('click', () => {
+          control.remove();
+          onDismiss();
+        });
+        box.append(el('span', null, text), close);
+        // Clicks and scrolling on the note must not pan or zoom the map under it.
+        L.DomEvent.disableClickPropagation(box);
+        L.DomEvent.disableScrollPropagation(box);
+        return box;
+      };
+      control.addTo(map);
     },
     getBounds() {
       const b = map.getBounds();

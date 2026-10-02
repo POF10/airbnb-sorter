@@ -1,10 +1,11 @@
 import { el } from './dom.js';
-import { createCard } from './card.js';
+import { createCard, setCardViewed } from './card.js';
 
 const CHUNK = 60;
 
 // Card grid that renders CHUNK cards at a time; the next chunk renders when the sentinel nears the viewport.
-export function createList({ onHover }) {
+// isViewed(id) tells whether a listing has been opened before.
+export function createList({ onHover, isViewed = () => false }) {
   const root = el('div', 'abs-list');
   const grid = el('div', 'abs-grid');
   const sentinel = el('div', 'abs-sentinel');
@@ -19,7 +20,7 @@ export function createList({ onHover }) {
   function renderMore() {
     if (rendered >= items.length) return;
     const fragment = document.createDocumentFragment();
-    for (const listing of items.slice(rendered, rendered + CHUNK)) fragment.append(createCard(listing));
+    for (const listing of items.slice(rendered, rendered + CHUNK)) fragment.append(createCard(listing, { viewed: isViewed(listing.id) }));
     rendered = Math.min(items.length, rendered + CHUNK);
     grid.append(fragment);
     // Re-observing makes a sentinel that is still visible fire again for the next chunk.
@@ -49,6 +50,10 @@ export function createList({ onHover }) {
     highlight(id) {
       grid.querySelector('.abs-card--hl')?.classList.remove('abs-card--hl');
       if (id) grid.querySelector(`.abs-card[data-id="${id}"]`)?.classList.add('abs-card--hl');
+    },
+    // Re-reads the viewed state of the rendered cards; cards rendered later read it when they are created.
+    refreshViewed() {
+      for (const card of grid.children) setCardViewed(card, isViewed(card.dataset.id));
     },
     destroy() {
       observer.disconnect();

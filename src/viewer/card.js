@@ -64,13 +64,24 @@ function createBody(listing) {
   return body;
 }
 
-// The whole card links to the listing on Airbnb (new tab). `compact` is the map-popup variant.
-export function createCard(listing, { compact = false } = {}) {
+// The whole card links to the listing on Airbnb (new tab). `compact` is the map-popup variant;
+// `viewed` marks a listing the user has already opened.
+export function createCard(listing, { compact = false, viewed = false } = {}) {
   const card = el('a', compact ? 'abs-card abs-card--compact' : 'abs-card');
   card.href = listing.url;
   card.target = '_blank';
   card.rel = 'noopener';
   card.dataset.id = listing.id;
   card.append(createCarousel(listing), createBody(listing));
+  if (viewed) setCardViewed(card, true);
   return card;
+}
+
+// Gives a rendered card the "viewed" look, or takes it away.
+export function setCardViewed(card, viewed) {
+  card.classList.toggle('abs-card--viewed', viewed);
+  const photo = card.querySelector('.abs-photo');
+  const mark = photo.querySelector('.abs-viewed');
+  if (viewed && !mark) photo.append(el('span', 'abs-viewed', `✓ ${t().viewed}`));
+  if (!viewed && mark) mark.remove();
 }
