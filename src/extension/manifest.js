@@ -17,6 +17,8 @@ export function buildManifest({ version }) {
     minimum_chrome_version: '114',
     icons: { 16: 'icons/16.png', 32: 'icons/32.png', 48: 'icons/48.png', 128: 'icons/128.png' },
     permissions: ['storage'],
+    // Its only job is to open the welcome page once, right after the first install.
+    background: { service_worker: 'background.js' },
     // Every page of the site, not just /s/…: Airbnb is a SPA and reaches the search without a page load.
     content_scripts: [{ matches: DOMAINS.map(matchPattern), js: ['content.js'], run_at: 'document_idle' }],
     action: { default_title: '__MSG_extName__', default_popup: 'popup.html' },

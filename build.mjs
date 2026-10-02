@@ -9,7 +9,8 @@ import { hasPlaceholderSupportLinks } from './src/config.js';
 
 const pkg = JSON.parse(await readFile('package.json', 'utf8'));
 const header = (await readFile('src/header.txt', 'utf8')).replace('{{version}}', pkg.version);
-const common = { bundle: true, format: 'iife', target: 'es2020', charset: 'utf8', legalComments: 'none', loader: { '.css': 'text' } };
+// .png is only imported by the dev stand (the welcome page shows the extension icon).
+const common = { bundle: true, format: 'iife', target: 'es2020', charset: 'utf8', legalComments: 'none', loader: { '.css': 'text', '.png': 'dataurl' } };
 
 // Every file under dir, as paths relative to it with forward slashes.
 async function listFiles(dir) {
@@ -24,10 +25,11 @@ async function buildExtension() {
   const out = 'dist/extension';
   await rm(out, { recursive: true, force: true });
   await mkdir(out, { recursive: true });
-  await esbuild.build({ ...common, entryPoints: ['src/extension/content.js'], outfile: `${out}/content.js` });
-  await esbuild.build({ ...common, entryPoints: ['src/extension/popup.js'], outfile: `${out}/popup.js` });
+  for (const script of ['content', 'popup', 'welcome', 'background']) {
+    await esbuild.build({ ...common, entryPoints: [`src/extension/${script}.js`], outfile: `${out}/${script}.js` });
+  }
   await writeFile(`${out}/manifest.json`, `${JSON.stringify(buildManifest({ version: pkg.version }), null, 2)}\n`);
-  for (const file of ['popup.html', 'popup.css']) await cp(`src/extension/${file}`, `${out}/${file}`);
+  for (const file of ['popup.html', 'popup.css', 'welcome.html', 'welcome.css']) await cp(`src/extension/${file}`, `${out}/${file}`);
   for (const dir of ['icons', '_locales']) await cp(`src/extension/${dir}`, `${out}/${dir}`, { recursive: true });
   // Leaflet is bundled into content.js; its licence (BSD-2-Clause) asks for the notice to travel with the code.
   await cp('node_modules/leaflet/LICENSE', `${out}/LEAFLET-LICENSE.txt`);
@@ -46,14 +48,14 @@ async function buildExtension() {
 if (process.argv.includes('--dev')) {
   const ctx = await esbuild.context({
     ...common,
-    entryPoints: { 'dev.bundle': 'dev/dev.js', 'popup-dev.bundle': 'dev/popup-dev.js' },
+    entryPoints: { 'dev.bundle': 'dev/dev.js', 'popup-dev.bundle': 'dev/popup-dev.js', 'welcome-dev.bundle': 'dev/welcome-dev.js' },
     outdir: 'dev',
     sourcemap: 'inline',
     logLevel: 'info',
   });
   await ctx.watch();
   const { port } = await ctx.serve({ servedir: 'dev', host: '127.0.0.1', port: 8000 });
-  console.log(`dev stand: http://localhost:${port}/ (overlay), http://localhost:${port}/popup.html (extension popup)`);
+  console.log(`dev stand: http://localhost:${port}/ (overlay), /popup.html (extension popup), /welcome.html (welcome page)`);
 } else {
   await mkdir('dist', { recursive: true });
   await esbuild.build({ ...common, entryPoints: ['src/userscript.js'], outfile: 'dist/airbnb-sorter.user.js', banner: { js: header } });

@@ -18,7 +18,7 @@ test('the manifest is MV3 with the package version and only the storage permissi
   assert.equal(manifest.minimum_chrome_version, '114');
   assert.deepEqual(manifest.permissions, ['storage']);
   assert.equal(manifest.host_permissions, undefined);
-  assert.equal(manifest.background, undefined);
+  assert.deepEqual(manifest.background, { service_worker: 'background.js' });
   assert.equal(manifest.default_locale, 'en');
   assert.equal(manifest.action.default_popup, 'popup.html');
   assert.equal(manifest.options_ui.page, 'popup.html');
