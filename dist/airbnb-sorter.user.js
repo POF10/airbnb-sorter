@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Airbnb Sorter
 // @namespace    airbnb-sorter.local
-// @version      0.2.0
+// @version      0.3.0
 // @description  Collects a whole Airbnb search (past the 270-listing cap) and shows it sortable by price, with photos and a map
 // @description:ru Собирает всю выдачу поиска Airbnb (а не только 270 объявлений) и показывает её с сортировкой по цене, фото и картой
 // @author       POF10
@@ -499,6 +499,19 @@
       saturated: (n) => `overfull price ranges: ${n} (some listings unavailable)`,
       partial: (reasons) => `Incomplete collection: ${reasons}`,
       collectFailed: (message) => `Could not collect the search: ${message}`,
+      mapArea: "map area",
+      filters: {
+        rating: "Rating",
+        reviews: "Reviews",
+        any: "Any",
+        hideViewed: "Hide viewed",
+        reset: "Reset",
+        empty: "Nothing matches these filters",
+        emptyArea: "Nothing was collected in this area"
+      },
+      viewed: "Viewed",
+      mapHint: "Only what your Airbnb search found is shown here. To search another area, move the map on Airbnb and press “↕ Sort all” again.",
+      dismiss: "Close",
       support: "Support the developer",
       popup: {
         title: "Price Sorter for Airbnb",
@@ -506,7 +519,22 @@
         language: "Language",
         languages: { auto: "Auto", en: "English", ru: "Русский" },
         github: "GitHub",
-        report: "Report a problem"
+        report: "Report a problem",
+        howItWorks: "How it works",
+        rate: "Rate",
+        viewedCount: (n) => `Viewed: ${n}`,
+        clearViewed: "Clear"
+      },
+      welcome: {
+        steps: [
+          "Open a homes search on Airbnb and set the dates, guests, filters and map area as usual — exactly that search is collected.",
+          "Press the button in the bottom-right corner of the page:",
+          "Sort by price, filter by rating and reviews, and browse on the map."
+        ],
+        open: "Open Airbnb",
+        pin: "Tip: pin the extension — the puzzle icon in the Chrome toolbar, then the pin. Clicking the icon opens the settings.",
+        free: "Free, with no ads. Nothing is collected or sent anywhere.",
+        privacy: "Privacy policy"
       }
     },
     ru: {
@@ -541,6 +569,19 @@
       saturated: (n) => `переполненных ценовых диапазонов: ${n} (часть объявлений недоступна)`,
       partial: (reasons) => `Неполный сбор: ${reasons}`,
       collectFailed: (message) => `Не удалось собрать выдачу: ${message}`,
+      mapArea: "область карты",
+      filters: {
+        rating: "Рейтинг",
+        reviews: "Отзывов",
+        any: "Любой",
+        hideViewed: "Скрыть просмотренные",
+        reset: "Сбросить",
+        empty: "Под эти фильтры ничего не подходит",
+        emptyArea: "В этой области ничего не собрано"
+      },
+      viewed: "Просмотрено",
+      mapHint: "Здесь только то, что собрано по вашему поиску на Airbnb. Чтобы искать в другом районе, передвиньте карту на Airbnb и нажмите «↕ Сортировать все» ещё раз.",
+      dismiss: "Закрыть",
       support: "Поддержать разработчика",
       popup: {
         title: "Сортировка по цене для Airbnb",
@@ -548,7 +589,22 @@
         language: "Язык",
         languages: { auto: "Авто", en: "English", ru: "Русский" },
         github: "GitHub",
-        report: "Сообщить о проблеме"
+        report: "Сообщить о проблеме",
+        howItWorks: "Как это работает",
+        rate: "Оценить",
+        viewedCount: (n) => `Просмотрено: ${n}`,
+        clearViewed: "Очистить"
+      },
+      welcome: {
+        steps: [
+          "Откройте поиск жилья на Airbnb и задайте даты, гостей, фильтры и область карты как обычно — соберётся именно эта выдача.",
+          "Нажмите кнопку в правом нижнем углу страницы:",
+          "Сортируйте по цене, фильтруйте по рейтингу и отзывам, смотрите на карте."
+        ],
+        open: "Открыть Airbnb",
+        pin: "Иконку расширения удобно закрепить: значок-пазл на панели Chrome, затем булавка. Клик по иконке открывает настройки.",
+        free: "Бесплатно, без рекламы. Ничего не собирается и никуда не отправляется.",
+        privacy: "Политика конфиденциальности"
       }
     }
   };
@@ -592,6 +648,23 @@
     }, key: (l) => l.reviews, dir: -1, then: (l) => l.rating }
   };
   var DEFAULT_SORT = "price-desc";
+  var RATING_STEPS = [0, 4.5, 4.7, 4.8, 4.9];
+  var REVIEW_STEPS = [0, 5, 20, 50, 100];
+  var NO_FILTERS = Object.freeze({ minRating: 0, minReviews: 0, hideViewed: false });
+  function hasActiveFilters({ minRating, minReviews, hideViewed }) {
+    return minRating > 0 || minReviews > 0 || hideViewed;
+  }
+  function passesFilters(listing, { minRating, minReviews, hideViewed }, isViewed = () => false) {
+    if (minRating > 0 && !(listing.rating != null && listing.rating >= minRating)) return false;
+    if (minReviews > 0 && !(listing.reviews != null && listing.reviews >= minReviews)) return false;
+    return !(hideViewed && isViewed(listing.id));
+  }
+  function filterListings(listings, filters, isViewed) {
+    return listings.filter((listing) => passesFilters(listing, filters, isViewed));
+  }
+  function thresholdCounts(listings, filters, key, steps, isViewed) {
+    return steps.map((step) => filterListings(listings, { ...filters, [key]: step }, isViewed).length);
+  }
   var byId = (a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
   function sortListings(listings, sortId) {
     const { key, dir, then } = Object.hasOwn(SORTS, sortId) ? SORTS[sortId] : SORTS[DEFAULT_SORT];
@@ -618,6 +691,7 @@
     return formatters.get(key);
   }
   var count = (n) => formatter("number").format(n);
+  var formatCount = count;
   function formatMoney(amount, currency) {
     if (amount == null) return "—";
     const gap = /\p{L}$/u.test(currency ?? "") ? " " : "";
@@ -638,6 +712,7 @@
       return url;
     }
   }
+  var MAP_BOUNDS = ["ne_lat", "ne_lng", "sw_lat", "sw_lng"];
   function describeSearch({ placeLabel: placeLabel2, searchUrl }) {
     const params = new URL(searchUrl).searchParams;
     const parts = [placeLabel2];
@@ -648,6 +723,7 @@
     }
     const guests = Number(params.get("adults") || 0) + Number(params.get("children") || 0);
     if (guests) parts.push(t().guests(guests));
+    if (MAP_BOUNDS.every((key) => params.has(key))) parts.push(t().mapArea);
     return parts.filter(Boolean).join(" · ");
   }
   function formatAge(iso, now = Date.now()) {
@@ -683,12 +759,23 @@
   // src/settings.js
   var SETTINGS_KEY = "settings";
   var LANGUAGES = ["auto", "en", "ru"];
-  var DEFAULT_SETTINGS = Object.freeze({ language: "auto", sort: DEFAULT_SORT });
+  var DEFAULT_SETTINGS = Object.freeze({
+    language: "auto",
+    sort: DEFAULT_SORT,
+    minRating: 0,
+    minReviews: 0,
+    hideViewed: false,
+    mapHintSeen: false
+  });
   function normalizeSettings(raw) {
     const value = raw && typeof raw === "object" ? raw : {};
     return {
       language: LANGUAGES.includes(value.language) ? value.language : DEFAULT_SETTINGS.language,
-      sort: typeof value.sort === "string" && Object.hasOwn(SORTS, value.sort) ? value.sort : DEFAULT_SETTINGS.sort
+      sort: typeof value.sort === "string" && Object.hasOwn(SORTS, value.sort) ? value.sort : DEFAULT_SETTINGS.sort,
+      minRating: RATING_STEPS.includes(value.minRating) ? value.minRating : DEFAULT_SETTINGS.minRating,
+      minReviews: REVIEW_STEPS.includes(value.minReviews) ? value.minReviews : DEFAULT_SETTINGS.minReviews,
+      hideViewed: value.hideViewed === true,
+      mapHintSeen: value.mapHintSeen === true
     };
   }
   async function loadSettings(storage) {
@@ -711,6 +798,44 @@
     return language === "auto" ? detect() : language;
   }
 
+  // src/viewed.js
+  var VIEWED_KEY = "viewed";
+  var VIEWED_LIMIT = 5e3;
+  function normalizeViewed(raw) {
+    const viewed = {};
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return viewed;
+    for (const [id, time] of Object.entries(raw)) {
+      if (typeof time === "number" && Number.isFinite(time)) viewed[id] = time;
+    }
+    return viewed;
+  }
+  async function loadViewed(storage) {
+    try {
+      return normalizeViewed(await storage.get(VIEWED_KEY, null));
+    } catch {
+      return {};
+    }
+  }
+  async function markViewed(storage, id, now = Date.now()) {
+    const viewed = await loadViewed(storage);
+    viewed[id] = now;
+    const ids = Object.keys(viewed);
+    if (ids.length > VIEWED_LIMIT) {
+      ids.sort((a, b) => viewed[a] - viewed[b]);
+      for (const oldest of ids.slice(0, ids.length - VIEWED_LIMIT)) delete viewed[oldest];
+    }
+    try {
+      await storage.set(VIEWED_KEY, viewed);
+    } catch (e) {
+      console.warn("[airbnb-sorter] could not save the viewed listings", e);
+    }
+    return viewed;
+  }
+  function listingIdFromPath(pathname) {
+    const m = /^\/rooms\/(?:plus\/)?(\d+)(?:\/|$)/.exec(pathname ?? "");
+    return m ? m[1] : null;
+  }
+
   // src/guard.js
   var ATTRIBUTE = "data-airbnb-sorter";
   function isPageClaimed(doc) {
@@ -723,6 +848,8 @@
   }
 
   // src/config.js
+  var STORE_URL = "https://chromewebstore.google.com/detail/price-sorter-for-airbnb/fpjgmgmmkdefjjdpplcdppkajpojdnkg";
+  var REVIEWS_URL = `${STORE_URL}/reviews`;
   var SUPPORT_LINKS = [
     { label: "PayPal", url: "https://paypal.me/Maksims1001" }
   ];
@@ -742,7 +869,7 @@
     'font:600 14px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif',
     "box-shadow:0 4px 12px rgba(0,0,0,.25)"
   ].join(";");
-  function createLauncher(onClick) {
+  function createLauncher(onClick, { onUrlChange } = {}) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.textContent = t().launcher;
@@ -757,6 +884,7 @@
       if (location.href === lastHref) return;
       lastHref = location.href;
       btn.style.display = isHomesSearchPath(location.pathname) ? "block" : "none";
+      onUrlChange?.(location.pathname);
     };
     sync();
     setInterval(sync, 500);
@@ -837,19 +965,27 @@
     body.append(price);
     return body;
   }
-  function createCard(listing, { compact = false } = {}) {
+  function createCard(listing, { compact = false, viewed = false } = {}) {
     const card = el("a", compact ? "abs-card abs-card--compact" : "abs-card");
     card.href = listing.url;
     card.target = "_blank";
     card.rel = "noopener";
     card.dataset.id = listing.id;
     card.append(createCarousel(listing), createBody(listing));
+    if (viewed) setCardViewed(card, true);
     return card;
+  }
+  function setCardViewed(card, viewed) {
+    card.classList.toggle("abs-card--viewed", viewed);
+    const photo = card.querySelector(".abs-photo");
+    const mark = photo.querySelector(".abs-viewed");
+    if (viewed && !mark) photo.append(el("span", "abs-viewed", `✓ ${t().viewed}`));
+    if (!viewed && mark) mark.remove();
   }
 
   // src/viewer/list.js
   var CHUNK = 60;
-  function createList({ onHover }) {
+  function createList({ onHover, isViewed = () => false }) {
     const root = el("div", "abs-list");
     const grid = el("div", "abs-grid");
     const sentinel = el("div", "abs-sentinel");
@@ -862,7 +998,7 @@
     function renderMore() {
       if (rendered >= items.length) return;
       const fragment = document.createDocumentFragment();
-      for (const listing of items.slice(rendered, rendered + CHUNK)) fragment.append(createCard(listing));
+      for (const listing of items.slice(rendered, rendered + CHUNK)) fragment.append(createCard(listing, { viewed: isViewed(listing.id) }));
       rendered = Math.min(items.length, rendered + CHUNK);
       grid.append(fragment);
       observer.unobserve(sentinel);
@@ -890,6 +1026,10 @@
         grid.querySelector(".abs-card--hl")?.classList.remove("abs-card--hl");
         if (id) grid.querySelector(`.abs-card[data-id="${id}"]`)?.classList.add("abs-card--hl");
       },
+      // Re-reads the viewed state of the rendered cards; cards rendered later read it when they are created.
+      refreshViewed() {
+        for (const card of grid.children) setCardViewed(card, isViewed(card.dataset.id));
+      },
       destroy() {
         observer.disconnect();
       }
@@ -898,7 +1038,8 @@
 
   // src/viewer/map.js
   var DENSE_LIMIT = 150;
-  function createMap(container, { L, onMarkerHover, onMoveEnd }) {
+  function createMap(container, { L, onMarkerHover, onMoveEnd, onUserMove = () => {
+  }, isViewed = () => false }) {
     const map = L.map(container, { zoomControl: true }).setView([0, 0], 2);
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
@@ -918,6 +1059,7 @@
       onMoveEnd();
     });
     let pendingFit = false;
+    let fitting = false;
     function fitAll() {
       if (markers.size === 0) return;
       const size = map.getSize();
@@ -927,15 +1069,23 @@
       }
       pendingFit = false;
       const bounds = L.latLngBounds([...markers.values()].map((m) => m.getLatLng()));
+      fitting = true;
       map.fitBounds(bounds, { padding: [24, 24], maxZoom: 16, animate: false });
+      fitting = false;
     }
+    map.on("dragstart", () => onUserMove());
+    map.on("zoomstart", () => {
+      if (!fitting) onUserMove();
+    });
     const resizeObserver = new ResizeObserver(() => {
       map.invalidateSize();
       if (pendingFit) fitAll();
     });
     resizeObserver.observe(container);
+    let hintShown = false;
     return {
-      setListings(listings) {
+      // fit: false keeps the current view (a filter changed); true fits the view to the new pins.
+      setListings(listings, { fit = true } = {}) {
         layer.clearLayers();
         markers.clear();
         highlighted = null;
@@ -943,13 +1093,13 @@
           if (listing.lat == null || listing.lng == null) continue;
           const label = el("span", "abs-pin-label", formatMoney(listing.price.amount, listing.price.currency));
           const marker = L.marker([listing.lat, listing.lng], {
-            icon: L.divIcon({ className: "abs-pin", html: label, iconSize: null }),
+            icon: L.divIcon({ className: isViewed(listing.id) ? "abs-pin abs-pin--viewed" : "abs-pin", html: label, iconSize: null }),
             riseOnHover: true,
             keyboard: false
           });
           marker.on("mouseover", () => onMarkerHover(listing.id));
           marker.on("mouseout", () => onMarkerHover(null));
-          marker.bindPopup(() => createCard(listing, { compact: true }), {
+          marker.bindPopup(() => createCard(listing, { compact: true, viewed: isViewed(listing.id) }), {
             className: "abs-popup",
             closeButton: false,
             minWidth: 260,
@@ -959,8 +1109,12 @@
           marker.addTo(layer);
           markers.set(listing.id, marker);
         }
-        fitAll();
+        if (fit) fitAll();
         updateDensity();
+      },
+      // Re-reads the viewed state of the pins on the map.
+      refreshViewed() {
+        for (const [id, marker] of markers) marker.getElement()?.classList.toggle("abs-pin--viewed", isViewed(id));
       },
       highlight(id) {
         const previous = highlighted && markers.get(highlighted);
@@ -974,6 +1128,27 @@
           marker.getElement()?.classList.add("abs-pin--hl");
           marker.setZIndexOffset(1e4);
         }
+      },
+      // A note at the bottom of the map with a close button; shown at most once per map.
+      showHint(text, closeLabel, onDismiss) {
+        if (hintShown) return;
+        hintShown = true;
+        const control = L.control({ position: "bottomleft" });
+        control.onAdd = () => {
+          const box = el("div", "abs-map-hint");
+          const close = button("×", "abs-map-hint-close");
+          close.title = closeLabel;
+          close.setAttribute("aria-label", closeLabel);
+          close.addEventListener("click", () => {
+            control.remove();
+            onDismiss();
+          });
+          box.append(el("span", null, text), close);
+          L.DomEvent.disableClickPropagation(box);
+          L.DomEvent.disableScrollPropagation(box);
+          return box;
+        };
+        control.addTo(map);
       },
       getBounds() {
         const b = map.getBounds();
@@ -991,14 +1166,126 @@
     };
   }
 
+  // src/viewer/toolbar.js
+  function createToolbar({ sortId, onSort, onFilter, onAreaToggle, onReset }) {
+    const sortSelect = el("select", "abs-select abs-select--small");
+    for (const [id, { label }] of Object.entries(SORTS)) {
+      const option = el("option", null, label);
+      option.value = id;
+      sortSelect.append(option);
+    }
+    sortSelect.value = sortId;
+    sortSelect.addEventListener("change", () => onSort(sortSelect.value));
+    const menus = [];
+    function closeMenus() {
+      let closed = false;
+      for (const { pill, box } of menus) {
+        if (box.hidden) continue;
+        box.hidden = true;
+        pill.setAttribute("aria-expanded", "false");
+        closed = true;
+      }
+      return closed;
+    }
+    function dropdown(key, title, steps, format) {
+      const pill = button("", "abs-pill");
+      pill.setAttribute("aria-haspopup", "true");
+      pill.setAttribute("aria-expanded", "false");
+      const box = el("div", "abs-menu");
+      box.hidden = true;
+      menus.push({ pill, box });
+      pill.addEventListener("click", () => {
+        const open = box.hidden;
+        closeMenus();
+        box.hidden = !open;
+        pill.setAttribute("aria-expanded", String(open));
+      });
+      const wrap = el("div", "abs-dd");
+      wrap.append(pill, box);
+      return {
+        el: wrap,
+        draw(current, counts) {
+          pill.textContent = current === 0 ? `${title} ▾` : `${title}: ${format(current)} ▾`;
+          pill.classList.toggle("abs-pill--on", current !== 0);
+          box.replaceChildren(...steps.map((step, i) => {
+            const option = button("", "abs-opt");
+            option.setAttribute("aria-pressed", String(step === current));
+            option.append(el("span", null, step === 0 ? t().filters.any : format(step)), el("span", "abs-count", formatCount(counts[i])));
+            option.addEventListener("click", () => {
+              closeMenus();
+              onFilter({ [key]: step });
+            });
+            return option;
+          }));
+        }
+      };
+    }
+    function toggle(text, onChange) {
+      const box = el("input");
+      box.type = "checkbox";
+      box.addEventListener("change", () => onChange(box.checked));
+      const label = el("label", "abs-toggle");
+      label.append(box, text);
+      return { box, label };
+    }
+    const rating = dropdown("minRating", `★ ${t().filters.rating}`, RATING_STEPS, (step) => `${step.toFixed(1)}+`);
+    const reviews = dropdown("minReviews", t().filters.reviews, REVIEW_STEPS, (step) => `${step}+`);
+    const area = toggle(t().onlyInMap, onAreaToggle);
+    const hide = toggle(t().filters.hideViewed, (checked) => onFilter({ hideViewed: checked }));
+    const resetBtn = button(t().filters.reset, "abs-btn abs-btn--small abs-reset");
+    resetBtn.addEventListener("click", () => onReset());
+    const root = el("div", "abs-filters");
+    root.append(sortSelect, el("span", "abs-sep"), rating.el, reviews.el, el("span", "abs-sep"), area.label, hide.label, resetBtn);
+    return {
+      el: root,
+      closeMenus,
+      // filters: { minRating, minReviews, hideViewed }; ratingCounts / reviewCounts: one number per step.
+      draw({ filters, onlyInMap, ratingCounts, reviewCounts }) {
+        rating.draw(filters.minRating, ratingCounts);
+        reviews.draw(filters.minReviews, reviewCounts);
+        area.box.checked = onlyInMap;
+        hide.box.checked = filters.hideViewed;
+        resetBtn.style.visibility = hasActiveFilters(filters) || onlyInMap ? "visible" : "hidden";
+      }
+    };
+  }
+
   // src/viewer/overlay.js
-  function createOverlay({ L, css, initialSort, supportUrl, onSortChange, onRefresh, onCancel, onClose }) {
+  function createOverlay({
+    L,
+    css,
+    initialSort,
+    initialFilters,
+    viewedIds = [],
+    showMapHint = false,
+    supportUrl,
+    onSortChange,
+    onFiltersChange,
+    onListingOpen,
+    onMapHintDismiss,
+    onRefresh,
+    onCancel,
+    onClose
+  }) {
     const host = document.createElement("div");
     host.id = "airbnb-sorter";
     host.style.cssText = "position:fixed;inset:0;z-index:2147483647;display:none";
     const shadow = host.attachShadow({ mode: "open" });
     const style = document.createElement("style");
     style.textContent = css;
+    const startSort = Object.hasOwn(SORTS, initialSort ?? "") ? initialSort : DEFAULT_SORT;
+    const state = {
+      listings: [],
+      meta: null,
+      fromCache: false,
+      sortId: startSort,
+      onlyInMap: false,
+      filters: { ...NO_FILTERS, ...initialFilters }
+    };
+    let viewed = new Set(viewedIds);
+    let hidden = new Set(viewed);
+    const isViewed = (id) => viewed.has(id);
+    const isHidden = (id) => hidden.has(id);
     const sub = el("div", "abs-sub");
     const summary = el("span");
     const warn = el("span", "abs-warn", "⚠");
@@ -1007,24 +1294,12 @@
     summaryLine.append(summary, warn);
     const info = el("div", "abs-info");
     info.append(sub, summaryLine);
-    const startSort = Object.hasOwn(SORTS, initialSort ?? "") ? initialSort : DEFAULT_SORT;
-    const sortSelect = el("select", "abs-select");
-    for (const [id, { label }] of Object.entries(SORTS)) {
-      const option = el("option", null, label);
-      option.value = id;
-      sortSelect.append(option);
-    }
-    sortSelect.value = startSort;
-    const areaBox = el("input");
-    areaBox.type = "checkbox";
-    const areaLabel = el("label", "abs-toggle");
-    areaLabel.append(areaBox, t().onlyInMap);
     const refreshBtn = button(t().refresh, "abs-btn");
     const viewBtn = button(t().showMap, "abs-btn abs-only-narrow");
     const closeBtn = button("×", "abs-close");
     closeBtn.title = t().close;
     const controls = el("div", "abs-controls");
-    controls.append(sortSelect, areaLabel, refreshBtn, viewBtn);
+    controls.append(refreshBtn, viewBtn);
     if (supportUrl) {
       const support = el("a", "abs-support", "♥");
       support.href = supportUrl;
@@ -1037,36 +1312,76 @@
     controls.append(closeBtn);
     const head = el("header", "abs-head");
     head.append(info, controls);
+    const toolbar = createToolbar({
+      sortId: startSort,
+      onSort: (sortId) => {
+        state.sortId = sortId;
+        onSortChange?.(sortId);
+        render();
+      },
+      onFilter: (patch) => setFilters({ ...state.filters, ...patch }),
+      onAreaToggle: (checked) => {
+        state.onlyInMap = checked;
+        render();
+      },
+      onReset: () => resetFilters()
+    });
     const progressLabel = el("div");
     const cancelBtn = button(t().cancel, "abs-btn");
     const progress = el("div", "abs-progress");
     progress.append(el("div", "abs-spinner"), progressLabel, cancelBtn);
     const errorBox = el("div", "abs-error");
     let map = null;
-    const list3 = createList({ onHover: (id) => map?.highlight(id) });
+    const list3 = createList({ onHover: (id) => map?.highlight(id), isViewed });
     list3.el.tabIndex = -1;
+    const emptyText = el("p", "abs-empty-text");
+    const emptyHint = el("p", "abs-empty-hint");
+    const emptyReset = button(t().filters.reset, "abs-btn");
+    const emptyBox = el("div", "abs-empty");
+    emptyBox.append(emptyText, emptyHint, emptyReset);
+    emptyBox.hidden = true;
+    list3.el.prepend(emptyBox);
     const mapBox = el("div", "abs-map");
     const main = el("main", "abs-main");
     main.append(list3.el, mapBox);
     const root = el("div", "abs-root");
     root.tabIndex = -1;
-    root.append(head, progress, errorBox, main);
+    root.append(head, toolbar.el, progress, errorBox, main);
     shadow.append(style, root);
     document.body.append(host);
-    const state = { listings: [], meta: null, fromCache: false, sortId: startSort, onlyInMap: false };
     let savedOverflow = "";
     function setMode(mode) {
       progress.hidden = mode !== "progress";
       errorBox.hidden = mode !== "error";
       main.hidden = mode !== "results";
-      sortSelect.disabled = mode !== "results";
-      areaBox.disabled = mode !== "results";
+      toolbar.el.hidden = mode !== "results";
+      if (mode !== "results") toolbar.closeMenus();
       refreshBtn.disabled = mode === "progress";
       summaryLine.hidden = mode !== "results";
     }
+    let filterVersion = 0;
+    let mapVersion = -1;
+    let fitNext = false;
+    function setFilters(filters) {
+      state.filters = filters;
+      hidden = new Set(viewed);
+      filterVersion++;
+      onFiltersChange?.(filters);
+      render();
+    }
+    function resetFilters() {
+      state.onlyInMap = false;
+      setFilters({ ...NO_FILTERS });
+    }
     let shownKey = "";
     function render() {
-      let shown = state.listings;
+      const filtered = filterListings(state.listings, state.filters, isHidden);
+      if (map && mapVersion !== filterVersion) {
+        mapVersion = filterVersion;
+        map.setListings(filtered, { fit: fitNext });
+        fitNext = false;
+      }
+      let shown = filtered;
       if (state.onlyInMap && map && mapBox.clientWidth > 0) shown = filterByBounds(shown, map.getBounds());
       const sorted = sortListings(shown, state.sortId);
       const key = sorted.map((l) => l.id).join(",");
@@ -1074,20 +1389,49 @@
         shownKey = key;
         list3.set(sorted);
       }
-      summary.textContent = summaryText(state.meta, state.listings.length, state.onlyInMap ? shown.length : null, { fromCache: state.fromCache });
+      emptyBox.hidden = sorted.length > 0 || state.listings.length === 0;
+      if (!emptyBox.hidden) {
+        const elsewhere = filtered.length > 0;
+        emptyText.textContent = elsewhere ? t().filters.emptyArea : t().filters.empty;
+        emptyHint.textContent = elsewhere ? t().mapHint : "";
+        emptyHint.hidden = !elsewhere;
+      }
+      const narrowed = hasActiveFilters(state.filters) || state.onlyInMap;
+      summary.textContent = summaryText(state.meta, state.listings.length, narrowed ? shown.length : null, { fromCache: state.fromCache });
       const reasons = state.meta.partial ? partialReasons(state.meta) : [];
       warn.hidden = reasons.length === 0;
       warn.title = t().partial(reasons.join("; "));
+      toolbar.draw({
+        filters: state.filters,
+        onlyInMap: state.onlyInMap,
+        ratingCounts: thresholdCounts(state.listings, state.filters, "minRating", RATING_STEPS, isHidden),
+        reviewCounts: thresholdCounts(state.listings, state.filters, "minReviews", REVIEW_STEPS, isHidden)
+      });
     }
-    sortSelect.addEventListener("change", () => {
-      state.sortId = sortSelect.value;
-      onSortChange?.(state.sortId);
-      render();
-    });
-    areaBox.addEventListener("change", () => {
-      state.onlyInMap = areaBox.checked;
-      render();
-    });
+    function refreshViewed() {
+      list3.refreshViewed();
+      map?.refreshViewed();
+    }
+    let hintPending = showMapHint;
+    function onUserMove() {
+      if (!hintPending) return;
+      hintPending = false;
+      map.showHint(t().mapHint, t().dismiss, () => onMapHintDismiss?.());
+    }
+    function onRootClick(e) {
+      if (!e.target.closest(".abs-dd")) toolbar.closeMenus();
+      if (e.type === "auxclick" && e.button !== 1) return;
+      if (e.target.closest(".abs-nav")) return;
+      const card = e.target.closest("a.abs-card");
+      if (!card) return;
+      viewed.add(card.dataset.id);
+      setCardViewed(card, true);
+      refreshViewed();
+      onListingOpen?.(card.dataset.id);
+    }
+    root.addEventListener("click", onRootClick, true);
+    root.addEventListener("auxclick", onRootClick, true);
+    emptyReset.addEventListener("click", () => resetFilters());
     refreshBtn.addEventListener("click", () => onRefresh());
     cancelBtn.addEventListener("click", () => onCancel());
     closeBtn.addEventListener("click", () => api.close());
@@ -1103,6 +1447,7 @@
     const onKey = (e) => {
       if (e.key !== "Escape") return;
       e.stopPropagation();
+      if (toolbar.closeMenus()) return;
       api.close();
     };
     const api = {
@@ -1132,6 +1477,11 @@
         list3.destroy();
         host.remove();
       },
+      // ids of every listing the user has opened; repaints the marks without re-rendering the list.
+      setViewed(ids) {
+        viewed = new Set(ids);
+        refreshViewed();
+      },
       // title: the search being collected (the header may still show the previous one).
       showProgress(p, title) {
         setMode("progress");
@@ -1145,18 +1495,22 @@
       showResults({ listings, meta }, { fromCache = false } = {}) {
         Object.assign(state, { listings, meta, fromCache });
         shownKey = "";
+        hidden = new Set(viewed);
+        filterVersion++;
+        fitNext = true;
         sub.textContent = describeSearch(meta);
         setMode("results");
         if (api.isOpen()) list3.el.focus({ preventScroll: true });
         map ?? (map = createMap(mapBox, {
           L,
+          isViewed,
           onMarkerHover: (id) => list3.highlight(id),
           onMoveEnd: () => {
             if (state.onlyInMap) render();
-          }
+          },
+          onUserMove
         }));
         map.invalidateSize();
-        map.setListings(listings);
         render();
       }
     };
@@ -1164,7 +1518,7 @@
   }
 
   // src/viewer/styles.css
-  var styles_default = ':host { all: initial; position: fixed; inset: 0; z-index: 2147483647; }\n[hidden] { display: none !important; }\n\n.abs-root {\n  position: absolute; inset: 0; display: flex; flex-direction: column;\n  background: #fff; color: #222;\n  font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;\n}\n.abs-root *, .abs-root *::before, .abs-root *::after { box-sizing: border-box; }\n.abs-root:focus, .abs-list:focus { outline: none; } /* programmatic focus targets, not controls */\n\n/* Header */\n.abs-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 12px 24px; border-bottom: 1px solid #ebebeb; }\n.abs-sub { font-size: 16px; font-weight: 600; }\n.abs-summary { display: flex; align-items: center; gap: 6px; color: #6a6a6a; font-size: 13px; }\n.abs-warn { color: #c13515; cursor: help; }\n.abs-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }\n.abs-select, .abs-btn { height: 36px; padding: 0 14px; border: 1px solid #b0b0b0; border-radius: 18px; background: #fff; color: inherit; font: inherit; cursor: pointer; }\n.abs-select:hover:not(:disabled), .abs-btn:hover:not(:disabled) { border-color: #222; }\n.abs-select:disabled, .abs-btn:disabled { opacity: .5; cursor: default; }\n.abs-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }\n.abs-close { width: 36px; height: 36px; border: 0; border-radius: 50%; background: transparent; color: inherit; font-size: 26px; line-height: 1; cursor: pointer; }\n.abs-close:hover { background: #f2f2f2; }\n.abs-support { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; color: #e0245e; font-size: 18px; line-height: 1; text-decoration: none; }\n.abs-support:hover { background: #fdecef; }\n\n/* Progress / error */\n.abs-progress, .abs-error { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 24px; text-align: center; }\n.abs-error { color: #c13515; }\n.abs-spinner { width: 32px; height: 32px; border: 3px solid #ebebeb; border-top-color: #ff385c; border-radius: 50%; animation: abs-spin .9s linear infinite; }\n@keyframes abs-spin { to { transform: rotate(360deg); } }\n\n/* Layout */\n.abs-main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); grid-template-rows: minmax(0, 1fr); }\n.abs-list { overflow-y: auto; padding: 24px; }\n.abs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 28px 20px; }\n.abs-sentinel { height: 1px; }\n.abs-map { position: relative; min-height: 0; }\n\n/* Card */\n.abs-card { display: block; color: inherit; text-decoration: none; border-radius: 14px; outline-offset: 4px; }\n.abs-card--hl { outline: 2px solid #222; }\n.abs-photo { position: relative; aspect-ratio: 20 / 19; overflow: hidden; border-radius: 12px; background: #f2f2f2; }\n.abs-photo img { display: block; width: 100%; height: 100%; object-fit: cover; }\n.abs-badge { position: absolute; top: 12px; left: 12px; padding: 4px 10px; border-radius: 12px; background: #fff; font-size: 12px; font-weight: 600; box-shadow: 0 1px 3px rgba(0, 0, 0, .15); }\n.abs-nav { position: absolute; top: 50%; width: 30px; height: 30px; border: 0; border-radius: 50%; background: rgba(255, 255, 255, .9); color: #222; font-size: 18px; line-height: 1; cursor: pointer; opacity: 0; transform: translateY(-50%); transition: opacity .15s; }\n.abs-photo:hover .abs-nav, .abs-photo:focus-within .abs-nav { opacity: 1; }\n.abs-nav--prev { left: 10px; }\n.abs-nav--next { right: 10px; }\n.abs-dots { position: absolute; left: 0; right: 0; bottom: 10px; display: flex; justify-content: center; gap: 5px; }\n.abs-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, .6); }\n.abs-dot--on { background: #fff; }\n.abs-body { display: flex; flex-direction: column; gap: 2px; padding-top: 10px; }\n.abs-row { display: flex; justify-content: space-between; gap: 8px; }\n.abs-title { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }\n.abs-rating { white-space: nowrap; }\n.abs-muted { color: #6a6a6a; }\n.abs-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.abs-price { margin-top: 4px; }\n.abs-price s { margin-right: 4px; }\n.abs-card--compact .abs-photo { border-radius: 12px 12px 0 0; }\n.abs-card--compact .abs-body { padding: 8px 10px 10px; }\n\n/* Map popup */\n.abs-popup .leaflet-popup-content-wrapper { padding: 0; overflow: hidden; border-radius: 12px; }\n.abs-popup .leaflet-popup-content { width: 260px !important; margin: 0; font-size: inherit; line-height: inherit; }\n/* Leaflet colours links (.leaflet-container a) and sets its own font on the map; cards keep ours. */\n.abs-popup a.abs-card { color: #222; }\n.abs-map.leaflet-container { font: inherit; }\n\n/* Map pins */\n.abs-pin { width: 0; height: 0; }\n.abs-pin-label {\n  position: absolute; padding: 4px 8px; border-radius: 14px; background: #fff; color: #222; white-space: nowrap;\n  font: 600 13px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;\n  box-shadow: 0 0 0 1px rgba(0, 0, 0, .08), 0 2px 4px rgba(0, 0, 0, .18);\n  transform: translate(-50%, -50%); transition: transform .1s;\n}\n.abs-pin:hover .abs-pin-label { transform: translate(-50%, -50%) scale(1.08); }\n.abs-pin:hover .abs-pin-label, .abs-pin--hl .abs-pin-label { background: #222; color: #fff; }\n.abs-map--dense .abs-pin-label { width: 10px; height: 10px; padding: 0; border-radius: 50%; background: #ff385c; font-size: 0; box-shadow: 0 0 0 2px #fff; }\n.abs-map--dense .abs-pin:hover .abs-pin-label,\n.abs-map--dense .abs-pin--hl .abs-pin-label { width: auto; height: auto; padding: 4px 8px; border-radius: 14px; background: #222; color: #fff; font-size: 13px; box-shadow: none; }\n\n/* Narrow screens: list or map, switched by a button */\n.abs-only-narrow { display: none; }\n@media (max-width: 900px) {\n  .abs-head { padding: 10px 16px; }\n  .abs-list { padding: 16px; }\n  .abs-main { grid-template-columns: minmax(0, 1fr); }\n  .abs-main .abs-map { display: none; }\n  .abs-main--map .abs-map { display: block; }\n  .abs-main--map .abs-list { display: none; }\n  .abs-only-narrow { display: inline-block; }\n}\n';
+  var styles_default = ':host { all: initial; position: fixed; inset: 0; z-index: 2147483647; }\n[hidden] { display: none !important; }\n\n.abs-root {\n  position: absolute; inset: 0; display: flex; flex-direction: column;\n  background: #fff; color: #222;\n  font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;\n}\n.abs-root *, .abs-root *::before, .abs-root *::after { box-sizing: border-box; }\n.abs-root:focus, .abs-list:focus { outline: none; } /* programmatic focus targets, not controls */\n\n/* Header */\n.abs-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 12px 24px; border-bottom: 1px solid #ebebeb; }\n.abs-sub { font-size: 16px; font-weight: 600; }\n.abs-summary { display: flex; align-items: center; gap: 6px; color: #6a6a6a; font-size: 13px; }\n.abs-warn { color: #c13515; cursor: help; }\n.abs-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }\n.abs-select, .abs-btn { height: 36px; padding: 0 14px; border: 1px solid #b0b0b0; border-radius: 18px; background: #fff; color: inherit; font: inherit; cursor: pointer; }\n.abs-select:hover:not(:disabled), .abs-btn:hover:not(:disabled) { border-color: #222; }\n.abs-select:disabled, .abs-btn:disabled { opacity: .5; cursor: default; }\n.abs-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }\n.abs-close { width: 36px; height: 36px; border: 0; border-radius: 50%; background: transparent; color: inherit; font-size: 26px; line-height: 1; cursor: pointer; }\n.abs-close:hover { background: #f2f2f2; }\n.abs-support { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; color: #e0245e; font-size: 18px; line-height: 1; text-decoration: none; }\n.abs-support:hover { background: #fdecef; }\n\n/* Toolbar: sort, filters, toggles */\n.abs-filters { position: relative; z-index: 1100; display: flex; align-items: center; gap: 10px 18px; flex-wrap: wrap; padding: 10px 24px; border-bottom: 1px solid #ebebeb; }\n.abs-select--small { height: 32px; padding: 0 10px; font-size: 13px; }\n.abs-sep { width: 1px; height: 22px; background: #dcdcdc; }\n.abs-filters .abs-toggle { font-size: 13px; }\n.abs-btn--small { height: 32px; font-size: 13px; }\n.abs-reset { margin-left: auto; }\n.abs-dd { position: relative; }\n.abs-pill { display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border: 1px solid #b0b0b0; border-radius: 16px; background: #fff; color: inherit; font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; }\n.abs-pill:hover { border-color: #222; }\n.abs-pill--on { border-color: #222; background: #222; color: #fff; }\n.abs-menu { position: absolute; top: 38px; left: 0; display: flex; flex-direction: column; gap: 2px; min-width: 200px; padding: 6px; border: 1px solid #ddd; border-radius: 12px; background: #fff; box-shadow: 0 6px 20px rgba(0, 0, 0, .16); }\n.abs-opt { display: flex; align-items: center; justify-content: space-between; gap: 24px; height: 34px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; font-size: 13px; text-align: left; cursor: pointer; }\n.abs-opt:hover { background: #f2f2f2; }\n.abs-opt[aria-pressed="true"] { background: #222; color: #fff; }\n.abs-count { color: #8a8a8a; font-size: 12px; }\n.abs-opt[aria-pressed="true"] .abs-count { color: #cfcfcf; }\n\n/* Nothing to show */\n.abs-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: 460px; margin: 48px auto; text-align: center; }\n.abs-empty p { margin: 0; }\n.abs-empty-text { font-size: 16px; font-weight: 600; }\n.abs-empty-hint { color: #6a6a6a; }\n\n/* Viewed listings */\n.abs-card--viewed .abs-photo img { opacity: .5; filter: saturate(.55); }\n.abs-card--viewed .abs-title, .abs-card--viewed .abs-price b { color: #6a6a6a; }\n.abs-viewed { position: absolute; top: 12px; right: 12px; padding: 4px 10px; border-radius: 12px; background: rgba(34, 34, 34, .8); color: #fff; font-size: 12px; font-weight: 600; }\n.abs-pin--viewed .abs-pin-label { background: #e2e2e2; color: #717171; }\n.abs-map--dense .abs-pin--viewed .abs-pin-label { background: #9b9b9b; }\n\n/* Note on the map */\n.abs-map-hint { display: flex; align-items: flex-start; gap: 10px; max-width: 380px; padding: 10px 12px; border-radius: 10px; background: rgba(34, 34, 34, .92); color: #fff; font-size: 13px; line-height: 1.4; }\n.abs-map-hint-close { flex: none; width: 22px; height: 22px; border: 0; border-radius: 50%; background: transparent; color: inherit; font-size: 18px; line-height: 1; cursor: pointer; }\n.abs-map-hint-close:hover { background: rgba(255, 255, 255, .18); }\n\n/* Progress / error */\n.abs-progress, .abs-error { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 24px; text-align: center; }\n.abs-error { color: #c13515; }\n.abs-spinner { width: 32px; height: 32px; border: 3px solid #ebebeb; border-top-color: #ff385c; border-radius: 50%; animation: abs-spin .9s linear infinite; }\n@keyframes abs-spin { to { transform: rotate(360deg); } }\n\n/* Layout */\n.abs-main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); grid-template-rows: minmax(0, 1fr); }\n.abs-list { overflow-y: auto; padding: 24px; }\n.abs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 28px 20px; }\n.abs-sentinel { height: 1px; }\n.abs-map { position: relative; min-height: 0; }\n\n/* Card */\n.abs-card { display: block; color: inherit; text-decoration: none; border-radius: 14px; outline-offset: 4px; }\n.abs-card--hl { outline: 2px solid #222; }\n.abs-photo { position: relative; aspect-ratio: 20 / 19; overflow: hidden; border-radius: 12px; background: #f2f2f2; }\n.abs-photo img { display: block; width: 100%; height: 100%; object-fit: cover; }\n.abs-badge { position: absolute; top: 12px; left: 12px; padding: 4px 10px; border-radius: 12px; background: #fff; font-size: 12px; font-weight: 600; box-shadow: 0 1px 3px rgba(0, 0, 0, .15); }\n.abs-nav { position: absolute; top: 50%; width: 30px; height: 30px; border: 0; border-radius: 50%; background: rgba(255, 255, 255, .9); color: #222; font-size: 18px; line-height: 1; cursor: pointer; opacity: 0; transform: translateY(-50%); transition: opacity .15s; }\n.abs-photo:hover .abs-nav, .abs-photo:focus-within .abs-nav { opacity: 1; }\n.abs-nav--prev { left: 10px; }\n.abs-nav--next { right: 10px; }\n.abs-dots { position: absolute; left: 0; right: 0; bottom: 10px; display: flex; justify-content: center; gap: 5px; }\n.abs-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, .6); }\n.abs-dot--on { background: #fff; }\n.abs-body { display: flex; flex-direction: column; gap: 2px; padding-top: 10px; }\n.abs-row { display: flex; justify-content: space-between; gap: 8px; }\n.abs-title { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }\n.abs-rating { white-space: nowrap; }\n.abs-muted { color: #6a6a6a; }\n.abs-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.abs-price { margin-top: 4px; }\n.abs-price s { margin-right: 4px; }\n.abs-card--compact .abs-photo { border-radius: 12px 12px 0 0; }\n.abs-card--compact .abs-body { padding: 8px 10px 10px; }\n\n/* Map popup */\n.abs-popup .leaflet-popup-content-wrapper { padding: 0; overflow: hidden; border-radius: 12px; }\n.abs-popup .leaflet-popup-content { width: 260px !important; margin: 0; font-size: inherit; line-height: inherit; }\n/* Leaflet colours links (.leaflet-container a) and sets its own font on the map; cards keep ours. */\n.abs-popup a.abs-card { color: #222; }\n.abs-map.leaflet-container { font: inherit; }\n\n/* Map pins */\n.abs-pin { width: 0; height: 0; }\n.abs-pin-label {\n  position: absolute; padding: 4px 8px; border-radius: 14px; background: #fff; color: #222; white-space: nowrap;\n  font: 600 13px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;\n  box-shadow: 0 0 0 1px rgba(0, 0, 0, .08), 0 2px 4px rgba(0, 0, 0, .18);\n  transform: translate(-50%, -50%); transition: transform .1s;\n}\n.abs-pin:hover .abs-pin-label { transform: translate(-50%, -50%) scale(1.08); }\n.abs-pin:hover .abs-pin-label, .abs-pin--hl .abs-pin-label { background: #222; color: #fff; }\n.abs-map--dense .abs-pin-label { width: 10px; height: 10px; padding: 0; border-radius: 50%; background: #ff385c; font-size: 0; box-shadow: 0 0 0 2px #fff; }\n.abs-map--dense .abs-pin:hover .abs-pin-label,\n.abs-map--dense .abs-pin--hl .abs-pin-label { width: auto; height: auto; padding: 4px 8px; border-radius: 14px; background: #222; color: #fff; font-size: 13px; box-shadow: none; }\n\n/* Narrow screens: list or map, switched by a button */\n.abs-only-narrow { display: none; }\n@media (max-width: 900px) {\n  .abs-head { padding: 10px 16px; }\n  .abs-list { padding: 16px; }\n  .abs-main { grid-template-columns: minmax(0, 1fr); }\n  .abs-main .abs-map { display: none; }\n  .abs-main--map .abs-map { display: block; }\n  .abs-main--map .abs-list { display: none; }\n  .abs-only-narrow { display: inline-block; }\n}\n';
 
   // src/main.js
   async function fetchPage(url, signal) {
@@ -1172,14 +1526,22 @@
     if (!response.ok) throw new HttpError(response.status);
     return response.text();
   }
-  async function start({ L, leafletCss, storage, onSettingsChange }) {
+  async function start({ L, leafletCss, storage, watch }) {
     if (!claimPage(document)) return false;
     let settings = await loadSettings(storage);
+    let viewed = await loadViewed(storage);
     const applyLocale = () => setLocale(resolveLocale(
       settings.language,
       () => detectLocale({ pageLang: document.documentElement.lang, browserLang: navigator.language })
     ));
     applyLocale();
+    const saveSetting = (patch) => {
+      settings = { ...settings, ...patch };
+      void saveSettings(storage, patch);
+    };
+    const recordView = async (id) => {
+      viewed = await markViewed(storage, id);
+    };
     let overlay = null;
     let overlayLocale = null;
     let shownKey = null;
@@ -1198,11 +1560,16 @@
           css: `${leafletCss}
 ${styles_default}`,
           initialSort: settings.sort,
+          initialFilters: { minRating: settings.minRating, minReviews: settings.minReviews, hideViewed: settings.hideViewed },
+          viewedIds: Object.keys(viewed),
+          showMapHint: !settings.mapHintSeen,
           supportUrl: SUPPORT_LINKS[0]?.url,
-          onSortChange: (sort) => {
-            settings = { ...settings, sort };
-            void saveSettings(storage, { sort });
+          onSortChange: (sort) => saveSetting({ sort }),
+          onFiltersChange: (filters) => saveSetting(filters),
+          onListingOpen: (id) => {
+            void recordView(id);
           },
+          onMapHintDismiss: () => saveSetting({ mapHintSeen: true }),
           onRefresh: () => run(true),
           onCancel: () => controller?.abort(),
           onClose: () => controller?.abort()
@@ -1224,12 +1591,14 @@ ${styles_default}`,
         shownKey = null;
         view.showProgress(null, title);
       }
-      const cached = force ? null : await loadCache(storage, searchUrl);
+      const [cached, stored] = await Promise.all([force ? null : loadCache(storage, searchUrl), loadViewed(storage)]);
       if (current !== controller) return;
       if (current.signal.aborted) {
         view.close();
         return;
       }
+      viewed = stored;
+      view.setViewed(Object.keys(viewed));
       if (cached) {
         try {
           view.showResults(cached, { fromCache: true });
@@ -1264,12 +1633,22 @@ ${styles_default}`,
       view.showResults(result);
       shownKey = key;
     }
-    const launcher = createLauncher(() => run(false));
-    onSettingsChange?.(async () => {
+    const launcher = createLauncher(() => run(false), {
+      // A listing page opened on Airbnb itself counts as viewed too.
+      onUrlChange: (pathname) => {
+        const id = listingIdFromPath(pathname);
+        if (id) void recordView(id);
+      }
+    });
+    watch?.(SETTINGS_KEY, async () => {
       settings = await loadSettings(storage);
       const previous = getLocale();
       applyLocale();
       if (getLocale() !== previous) launcher.refreshLabel();
+    });
+    watch?.(VIEWED_KEY, async () => {
+      viewed = await loadViewed(storage);
+      overlay?.setViewed(Object.keys(viewed));
     });
     return true;
   }
