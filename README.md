@@ -22,7 +22,12 @@ There are two ways to install it. Both give the same button and the same result;
 
 ### Option 1: Chrome extension
 
-Works in Chrome, Edge and other Chromium browsers. The extension is not in the Chrome Web Store yet, so it is loaded from a folder:
+Works in Chrome, Edge and other Chromium browsers. Open **[Price Sorter for Airbnb](https://chromewebstore.google.com/detail/price-sorter-for-airbnb/fpjgmgmmkdefjjdpplcdppkajpojdnkg)** in the Chrome Web Store and click **Add to Chrome**. Updates arrive automatically.
+
+Clicking the extension's icon in the toolbar opens its settings, where you can choose the interface language (Auto, English, Русский).
+
+<details>
+<summary>Installing from a folder instead, without the store</summary>
 
 1. Open the [latest release](https://github.com/POF10/airbnb-sorter/releases/latest) and download `airbnb-sorter-extension-<version>.zip`.
 2. Unpack the zip into a folder you will keep: the browser loads the extension from it every time it starts.
@@ -32,7 +37,7 @@ Works in Chrome, Edge and other Chromium browsers. The extension is not in the C
 
 To update, download the new zip, unpack it over the old folder and press the reload arrow on the extension's card.
 
-Clicking the extension's icon in the toolbar opens its settings, where you can choose the interface language (Auto, English, Русский).
+</details>
 
 ### Option 2: Tampermonkey userscript
 
