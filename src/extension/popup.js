@@ -7,4 +7,5 @@ renderPopup(document.getElementById('app'), {
   storage: chromeStorage(chrome.storage.local),
   version: chrome.runtime.getManifest().version,
   browserLang: chrome.i18n.getUILanguage(),
+  welcomeUrl: chrome.runtime.getURL('welcome.html'),
 });

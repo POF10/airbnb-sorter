@@ -24,3 +24,11 @@ body {
 .pop-foot { padding-top: 12px; border-top: 1px solid #ebebeb; color: #6a6a6a; font-size: 13px; }
 .pop-foot a { color: inherit; }
 .pop-foot a:hover { color: #222; }
+
+.pop-howto a { color: inherit; white-space: nowrap; }
+.pop-howto a:hover { color: #222; }
+.pop-viewed { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pop-small-btn { height: 30px; padding: 0 12px; border: 1px solid #b0b0b0; border-radius: 15px; background: #fff; color: inherit; font: inherit; font-size: 13px; cursor: pointer; }
+.pop-small-btn:hover { border-color: #222; }
+.pop-btn--quiet { border: 1px solid #b0b0b0; background: #fff; color: #222; }
+.pop-btn--quiet:hover { border-color: #222; background: #fff; }
