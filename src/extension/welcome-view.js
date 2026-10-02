@@ -25,9 +25,13 @@ const BUTTON_STEP = 1;
 // storage: { get, set }; browserLang: the browser UI language; iconUrl: the extension icon;
 // watch: optional (key, callback) — re-renders when the language is changed in the popup.
 export async function renderWelcome(root, { storage, browserLang, iconUrl, watch }) {
+  let drawn = null;
   async function draw() {
     const settings = await loadSettings(storage);
-    setLocale(resolveLocale(settings.language, () => detectLocale({ browserLang })));
+    const locale = resolveLocale(settings.language, () => detectLocale({ browserLang }));
+    if (locale === drawn) return; // the other settings do not show on this page
+    drawn = locale;
+    setLocale(locale);
     document.documentElement.lang = getLocale();
     const texts = t().welcome;
     document.title = t().popup.title;

@@ -1089,6 +1089,7 @@
       if (!fitting) onUserMove();
     });
     container.addEventListener("keydown", (e) => {
+      if (e.target !== container || e.ctrlKey || e.altKey || e.metaKey) return;
       if (/^Arrow/.test(e.key) || ["+", "-", "="].includes(e.key)) onUserMove();
     });
     const resizeObserver = new ResizeObserver(() => {
@@ -1134,11 +1135,11 @@
       },
       // Back to the last frame (the narrow-screen switch to the map uses it).
       fitAll: fitFrame,
-      // Re-reads the viewed state of the pins on the map and of the open popup's card.
+      // Re-reads the viewed state of the pins on the map and of the open popup's card (a popup being closed
+      // stays in the page while it fades out, so there can be two).
       refreshViewed() {
         for (const [id, marker] of markers) marker.getElement()?.classList.toggle("abs-pin--viewed", isViewed(id));
-        const card = container.querySelector(".leaflet-popup a.abs-card");
-        if (card) setCardViewed(card, isViewed(card.dataset.id));
+        for (const card of container.querySelectorAll(".leaflet-popup a.abs-card")) setCardViewed(card, isViewed(card.dataset.id));
       },
       highlight(id) {
         const previous = highlighted && markers.get(highlighted);
@@ -1228,6 +1229,7 @@
         draw(current, counts) {
           pill.textContent = current === 0 ? `${title} ▾` : `${title}: ${format(current)} ▾`;
           pill.classList.toggle("abs-pill--on", current !== 0);
+          const focused = [...box.children].indexOf(box.getRootNode().activeElement);
           box.replaceChildren(...steps.map((step, i) => {
             const option = button("", "abs-opt");
             option.setAttribute("aria-pressed", String(step === current));
@@ -1239,6 +1241,7 @@
             });
             return option;
           }));
+          if (focused >= 0) box.children[focused].focus();
         }
       };
     }
@@ -1392,7 +1395,7 @@
     function resetFilters() {
       state.onlyInMap = false;
       setFilters({ ...NO_FILTERS });
-      list3.el.focus({ preventScroll: true });
+      (list3.el.clientWidth > 0 ? list3.el : root).focus({ preventScroll: true });
     }
     let shownKey = "";
     function render() {
@@ -1422,6 +1425,9 @@
       const reasons = state.meta.partial ? partialReasons(state.meta) : [];
       warn.hidden = reasons.length === 0;
       warn.title = t().partial(reasons.join("; "));
+      drawToolbar();
+    }
+    function drawToolbar() {
       toolbar.draw({
         filters: state.filters,
         onlyInMap: state.onlyInMap,
@@ -1432,6 +1438,7 @@
     function refreshViewed() {
       list3.refreshViewed();
       map?.refreshViewed();
+      if (state.filters.hideViewed) drawToolbar();
     }
     let hintPending = showMapHint;
     function onUserMove() {

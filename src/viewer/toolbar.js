@@ -50,6 +50,8 @@ export function createToolbar({ sortId, onSort, onFilter, onAreaToggle, onReset 
       draw(current, counts) {
         pill.textContent = current === 0 ? `${title} ▾` : `${title}: ${format(current)} ▾`;
         pill.classList.toggle('abs-pill--on', current !== 0);
+        // The options are rebuilt; a redraw under an open menu must not take the focus away from it.
+        const focused = [...box.children].indexOf(box.getRootNode().activeElement);
         box.replaceChildren(...steps.map((step, i) => {
           const option = button('', 'abs-opt');
           option.setAttribute('aria-pressed', String(step === current));
@@ -61,6 +63,7 @@ export function createToolbar({ sortId, onSort, onFilter, onAreaToggle, onReset 
           });
           return option;
         }));
+        if (focused >= 0) box.children[focused].focus();
       },
     };
   }

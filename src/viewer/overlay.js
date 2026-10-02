@@ -136,8 +136,9 @@ export function createOverlay({
   function resetFilters() {
     state.onlyInMap = false;
     setFilters({ ...NO_FILTERS });
-    // The button that was pressed is gone now; keep the focus inside the overlay.
-    list.el.focus({ preventScroll: true });
+    // The button that was pressed is gone now; keep the focus inside the overlay. On narrow screens the
+    // list may be the hidden one of the two views.
+    (list.el.clientWidth > 0 ? list.el : root).focus({ preventScroll: true });
   }
 
   // Re-rendering the list resets its scroll, so it only happens when the shown listings actually change.
@@ -174,7 +175,11 @@ export function createOverlay({
     const reasons = state.meta.partial ? partialReasons(state.meta) : [];
     warn.hidden = reasons.length === 0;
     warn.title = t().partial(reasons.join('; '));
-    // Counts say what choosing an option would give, and choosing retakes the "hide viewed" snapshot.
+    drawToolbar();
+  }
+
+  // Counts say what choosing an option would give, and choosing retakes the "hide viewed" snapshot.
+  function drawToolbar() {
     toolbar.draw({
       filters: state.filters,
       onlyInMap: state.onlyInMap,
@@ -186,6 +191,7 @@ export function createOverlay({
   function refreshViewed() {
     list.refreshViewed();
     map?.refreshViewed();
+    if (state.filters.hideViewed) drawToolbar(); // the counts leave out the viewed ones
   }
 
   // The first time the user moves the map: say that it only shows what was collected.

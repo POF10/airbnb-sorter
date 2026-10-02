@@ -57,7 +57,9 @@ export function createMap(container, { L, onMarkerHover, onMoveEnd, onUserMove =
   // Dragging and the keyboard are always the user; zooming is the user unless it comes from our own fit.
   map.on('dragstart', () => onUserMove());
   map.on('zoomstart', () => { if (!fitting) onUserMove(); });
+  // Leaflet's keyboard handler works only with the focus on the map itself and without Ctrl, Alt or Meta.
   container.addEventListener('keydown', e => {
+    if (e.target !== container || e.ctrlKey || e.altKey || e.metaKey) return;
     if (/^Arrow/.test(e.key) || ['+', '-', '='].includes(e.key)) onUserMove();
   });
 
@@ -102,11 +104,11 @@ export function createMap(container, { L, onMarkerHover, onMoveEnd, onUserMove =
     },
     // Back to the last frame (the narrow-screen switch to the map uses it).
     fitAll: fitFrame,
-    // Re-reads the viewed state of the pins on the map and of the open popup's card.
+    // Re-reads the viewed state of the pins on the map and of the open popup's card (a popup being closed
+    // stays in the page while it fades out, so there can be two).
     refreshViewed() {
       for (const [id, marker] of markers) marker.getElement()?.classList.toggle('abs-pin--viewed', isViewed(id));
-      const card = container.querySelector('.leaflet-popup a.abs-card');
-      if (card) setCardViewed(card, isViewed(card.dataset.id));
+      for (const card of container.querySelectorAll('.leaflet-popup a.abs-card')) setCardViewed(card, isViewed(card.dataset.id));
     },
     highlight(id) {
       const previous = highlighted && markers.get(highlighted);
