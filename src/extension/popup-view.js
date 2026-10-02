@@ -4,6 +4,7 @@ import { el, button } from '../viewer/dom.js';
 import { t, setLocale, getLocale, detectLocale } from '../i18n.js';
 import { loadSettings, saveSettings, resolveLocale, LANGUAGES } from '../settings.js';
 import { loadViewed, clearViewed } from '../viewed.js';
+import { formatCount } from '../viewer/logic.js';
 import { SUPPORT_LINKS, HOMEPAGE_URL, ISSUES_URL, REVIEWS_URL } from '../config.js';
 
 function link(text, href, className) {
@@ -55,11 +56,12 @@ export async function renderPopup(root, { storage, version, browserLang, welcome
       const clear = button(texts.clearViewed, 'pop-small-btn');
       clear.addEventListener('click', async () => {
         await clearViewed(storage);
-        viewedCount = 0;
-        draw();
+        // Read back rather than assume: a failed write must not look like a cleared list.
+        viewedCount = Object.keys(await loadViewed(storage)).length;
+        draw({ focusLanguage: true }); // the button that was pressed is gone
       });
       const viewedRow = el('div', 'pop-viewed');
-      viewedRow.append(el('span', null, texts.viewedCount(viewedCount)), clear);
+      viewedRow.append(el('span', null, texts.viewedCount(formatCount(viewedCount))), clear);
       parts.push(viewedRow);
     }
 

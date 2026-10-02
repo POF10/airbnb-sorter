@@ -61,7 +61,7 @@ This extension is not affiliated with, endorsed by or sponsored by Airbnb. Airbn
 
 **Permission justification — storage.** Keeps the last collected search, so reopening the same search does not repeat the requests, the user's settings (interface language, sort order, filters) and the list of listings the user has opened, which are marked as viewed. Stored locally in `chrome.storage.local`, never synced or sent anywhere.
 
-**Permission justification — host permissions (Airbnb domains).** The content script runs only on Airbnb's own domains (airbnb.com and its country domains). It adds the "↕ Sort all" button to the search page and, when the user presses it, requests the pages of that search from the same Airbnb site in the user's session. It runs on every page of those sites because Airbnb is a single-page application and reaches the search page without a page load. No other site is accessed.
+**Permission justification — host permissions (Airbnb domains).** The content script runs only on Airbnb's own domains (airbnb.com and its country domains). It adds the "↕ Sort all" button to the search page and, when the user presses it, requests the pages of that search from the same Airbnb site in the user's session. It also notes, in local storage only, which listing pages the user opens on those sites, so that already viewed listings can be marked in the results. It runs on every page of those sites because Airbnb is a single-page application and reaches the search page without a page load. No other site is accessed.
 
 **Remote code.** No. All code, including the Leaflet map library, is inside the package. Map tiles (images) come from OpenStreetMap and listing photos (images) from Airbnb.
 

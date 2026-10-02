@@ -39,6 +39,14 @@ test('every __MSG_name__ in the manifest is defined in both locales', async () =
   }
 });
 
+test('the manifest has exactly the keys we mean it to have', () => {
+  // Anything new here (optional permissions, web-accessible resources, …) changes what Chrome asks the user.
+  assert.deepEqual(Object.keys(buildManifest({ version: '1.2.3' })).sort(), [
+    'action', 'background', 'content_scripts', 'default_locale', 'description', 'icons', 'manifest_version',
+    'minimum_chrome_version', 'name', 'options_ui', 'permissions', 'version',
+  ]);
+});
+
 test('one content script on every Airbnb domain, top frame only', () => {
   const { content_scripts: scripts } = buildManifest({ version: '1.2.3' });
   assert.equal(scripts.length, 1);

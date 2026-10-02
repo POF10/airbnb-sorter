@@ -15,8 +15,17 @@ export const RATING_STEPS = [0, 4.5, 4.7, 4.8, 4.9];
 export const REVIEW_STEPS = [0, 5, 20, 50, 100];
 export const NO_FILTERS = Object.freeze({ minRating: 0, minReviews: 0, hideViewed: false });
 
+// Anything that is not an offered threshold or a real boolean reads as "no filter".
+export function sanitizeFilters(raw) {
+  return {
+    minRating: RATING_STEPS.includes(raw?.minRating) ? raw.minRating : 0,
+    minReviews: REVIEW_STEPS.includes(raw?.minReviews) ? raw.minReviews : 0,
+    hideViewed: raw?.hideViewed === true,
+  };
+}
+
 export function hasActiveFilters({ minRating, minReviews, hideViewed }) {
-  return minRating > 0 || minReviews > 0 || hideViewed;
+  return minRating > 0 || minReviews > 0 || hideViewed === true;
 }
 
 // A listing without a rating ("New") fails any rating threshold; one without a review count fails any review threshold.

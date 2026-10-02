@@ -87,3 +87,11 @@ test('the welcome page has three steps in each language', () => {
     assert.equal(t().welcome.steps.length, 3, locale);
   }
 });
+
+test('the viewed counter is a function of the count in each language', () => {
+  for (const locale of ['en', 'ru']) {
+    setLocale(locale);
+    assert.equal(typeof t().popup.viewedCount, 'function', locale);
+    assert.ok(t().popup.viewedCount('1,295').includes('1,295'), locale);
+  }
+});

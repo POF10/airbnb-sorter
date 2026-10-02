@@ -9,8 +9,7 @@ import { hasPlaceholderSupportLinks } from './src/config.js';
 
 const pkg = JSON.parse(await readFile('package.json', 'utf8'));
 const header = (await readFile('src/header.txt', 'utf8')).replace('{{version}}', pkg.version);
-// .png is only imported by the dev stand (the welcome page shows the extension icon).
-const common = { bundle: true, format: 'iife', target: 'es2020', charset: 'utf8', legalComments: 'none', loader: { '.css': 'text', '.png': 'dataurl' } };
+const common = { bundle: true, format: 'iife', target: 'es2020', charset: 'utf8', legalComments: 'none', loader: { '.css': 'text' } };
 
 // Every file under dir, as paths relative to it with forward slashes.
 async function listFiles(dir) {
@@ -48,6 +47,8 @@ async function buildExtension() {
 if (process.argv.includes('--dev')) {
   const ctx = await esbuild.context({
     ...common,
+    // Only the stand imports an image (the welcome page shows the extension icon); the real builds never inline one.
+    loader: { ...common.loader, '.png': 'dataurl' },
     entryPoints: { 'dev.bundle': 'dev/dev.js', 'popup-dev.bundle': 'dev/popup-dev.js', 'welcome-dev.bundle': 'dev/welcome-dev.js' },
     outdir: 'dev',
     sourcemap: 'inline',

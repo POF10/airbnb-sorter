@@ -527,13 +527,13 @@
       },
       welcome: {
         steps: [
-          "Open a homes search on Airbnb and set the dates, guests, filters and map area as usual — exactly that search is collected.",
+          "Open a homes search on Airbnb and set the dates, guests, filters and map area as usual — that exact search is what gets collected.",
           "Press the button in the bottom-right corner of the page:",
           "Sort by price, filter by rating and reviews, and browse on the map."
         ],
         open: "Open Airbnb",
-        pin: "Tip: pin the extension — the puzzle icon in the Chrome toolbar, then the pin. Clicking the icon opens the settings.",
-        free: "Free, with no ads. Nothing is collected or sent anywhere.",
+        pin: "Tip: pin the extension — the puzzle icon in the Chrome toolbar, then the pin. Clicking the extension’s icon opens its settings.",
+        free: "Free, with no ads. Nothing leaves your browser.",
         privacy: "Privacy policy"
       }
     },
@@ -580,7 +580,7 @@
         emptyArea: "В этой области ничего не собрано"
       },
       viewed: "Просмотрено",
-      mapHint: "Здесь только то, что собрано по вашему поиску на Airbnb. Чтобы искать в другом районе, передвиньте карту на Airbnb и нажмите «↕ Сортировать все» ещё раз.",
+      mapHint: "Здесь только то, что собрано по вашему поиску на Airbnb. Чтобы искать в другом месте, передвиньте карту на Airbnb и нажмите «↕ Сортировать все» ещё раз.",
       dismiss: "Закрыть",
       support: "Поддержать разработчика",
       popup: {
@@ -603,7 +603,7 @@
         ],
         open: "Открыть Airbnb",
         pin: "Иконку расширения удобно закрепить: значок-пазл на панели Chrome, затем булавка. Клик по иконке открывает настройки.",
-        free: "Бесплатно, без рекламы. Ничего не собирается и никуда не отправляется.",
+        free: "Бесплатно, без рекламы. Ничего не покидает ваш браузер.",
         privacy: "Политика конфиденциальности"
       }
     }
@@ -651,8 +651,15 @@
   var RATING_STEPS = [0, 4.5, 4.7, 4.8, 4.9];
   var REVIEW_STEPS = [0, 5, 20, 50, 100];
   var NO_FILTERS = Object.freeze({ minRating: 0, minReviews: 0, hideViewed: false });
+  function sanitizeFilters(raw) {
+    return {
+      minRating: RATING_STEPS.includes(raw?.minRating) ? raw.minRating : 0,
+      minReviews: REVIEW_STEPS.includes(raw?.minReviews) ? raw.minReviews : 0,
+      hideViewed: raw?.hideViewed === true
+    };
+  }
   function hasActiveFilters({ minRating, minReviews, hideViewed }) {
-    return minRating > 0 || minReviews > 0 || hideViewed;
+    return minRating > 0 || minReviews > 0 || hideViewed === true;
   }
   function passesFilters(listing, { minRating, minReviews, hideViewed }, isViewed = () => false) {
     if (minRating > 0 && !(listing.rating != null && listing.rating >= minRating)) return false;
@@ -762,9 +769,8 @@
   var DEFAULT_SETTINGS = Object.freeze({
     language: "auto",
     sort: DEFAULT_SORT,
-    minRating: 0,
-    minReviews: 0,
-    hideViewed: false,
+    ...NO_FILTERS,
+    // minRating, minReviews, hideViewed
     mapHintSeen: false
   });
   function normalizeSettings(raw) {
@@ -772,9 +778,7 @@
     return {
       language: LANGUAGES.includes(value.language) ? value.language : DEFAULT_SETTINGS.language,
       sort: typeof value.sort === "string" && Object.hasOwn(SORTS, value.sort) ? value.sort : DEFAULT_SETTINGS.sort,
-      minRating: RATING_STEPS.includes(value.minRating) ? value.minRating : DEFAULT_SETTINGS.minRating,
-      minReviews: REVIEW_STEPS.includes(value.minReviews) ? value.minReviews : DEFAULT_SETTINGS.minReviews,
-      hideViewed: value.hideViewed === true,
+      ...sanitizeFilters(value),
       mapHintSeen: value.mapHintSeen === true
     };
   }
@@ -801,11 +805,12 @@
   // src/viewed.js
   var VIEWED_KEY = "viewed";
   var VIEWED_LIMIT = 5e3;
+  var isListingId = (id) => typeof id === "string" && /^\d+$/.test(id);
   function normalizeViewed(raw) {
     const viewed = {};
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return viewed;
     for (const [id, time] of Object.entries(raw)) {
-      if (typeof time === "number" && Number.isFinite(time)) viewed[id] = time;
+      if (isListingId(id) && typeof time === "number" && Number.isFinite(time)) viewed[id] = time;
     }
     return viewed;
   }
@@ -818,11 +823,12 @@
   }
   async function markViewed(storage, id, now = Date.now()) {
     const viewed = await loadViewed(storage);
+    if (!isListingId(id)) return viewed;
     viewed[id] = now;
     const ids = Object.keys(viewed);
     if (ids.length > VIEWED_LIMIT) {
-      ids.sort((a, b) => viewed[a] - viewed[b]);
-      for (const oldest of ids.slice(0, ids.length - VIEWED_LIMIT)) delete viewed[oldest];
+      const others = ids.filter((other) => other !== id).sort((a, b) => viewed[a] - viewed[b]);
+      for (const oldest of others.slice(0, ids.length - VIEWED_LIMIT)) delete viewed[oldest];
     }
     try {
       await storage.set(VIEWED_KEY, viewed);
@@ -832,7 +838,7 @@
     return viewed;
   }
   function listingIdFromPath(pathname) {
-    const m = /^\/rooms\/(?:plus\/)?(\d+)(?:\/|$)/.exec(pathname ?? "");
+    const m = /^\/(?:rooms\/(?:plus\/)?|luxury\/listing\/)(\d+)(?:\/|$)/.exec(pathname ?? "");
     return m ? m[1] : null;
   }
 
@@ -941,6 +947,7 @@
           e.stopPropagation();
           show(index + step);
         });
+        btn.addEventListener("auxclick", (e) => e.preventDefault());
       }
       box.append(prev, next, dots);
       show(0);
@@ -1038,6 +1045,7 @@
 
   // src/viewer/map.js
   var DENSE_LIMIT = 150;
+  var hasPoint = (listing) => listing.lat != null && listing.lng != null;
   function createMap(container, { L, onMarkerHover, onMoveEnd, onUserMove = () => {
   }, isViewed = () => false }) {
     const map = L.map(container, { zoomControl: true }).setView([0, 0], 2);
@@ -1058,39 +1066,44 @@
       updateDensity();
       onMoveEnd();
     });
+    let frame = null;
     let pendingFit = false;
     let fitting = false;
-    function fitAll() {
-      if (markers.size === 0) return;
+    function fitFrame() {
+      if (!frame) return;
       const size = map.getSize();
       if (!size.x || !size.y) {
         pendingFit = true;
         return;
       }
       pendingFit = false;
-      const bounds = L.latLngBounds([...markers.values()].map((m) => m.getLatLng()));
       fitting = true;
-      map.fitBounds(bounds, { padding: [24, 24], maxZoom: 16, animate: false });
-      fitting = false;
+      try {
+        map.fitBounds(frame, { padding: [24, 24], maxZoom: 16, animate: false });
+      } finally {
+        fitting = false;
+      }
     }
     map.on("dragstart", () => onUserMove());
     map.on("zoomstart", () => {
       if (!fitting) onUserMove();
     });
+    container.addEventListener("keydown", (e) => {
+      if (/^Arrow/.test(e.key) || ["+", "-", "="].includes(e.key)) onUserMove();
+    });
     const resizeObserver = new ResizeObserver(() => {
       map.invalidateSize();
-      if (pendingFit) fitAll();
+      if (pendingFit) fitFrame();
     });
     resizeObserver.observe(container);
-    let hintShown = false;
     return {
-      // fit: false keeps the current view (a filter changed); true fits the view to the new pins.
-      setListings(listings, { fit = true } = {}) {
+      // Replaces the pins. The view stays where it is: fit() is what moves it.
+      setListings(listings) {
         layer.clearLayers();
         markers.clear();
         highlighted = null;
         for (const listing of listings) {
-          if (listing.lat == null || listing.lng == null) continue;
+          if (!hasPoint(listing)) continue;
           const label = el("span", "abs-pin-label", formatMoney(listing.price.amount, listing.price.currency));
           const marker = L.marker([listing.lat, listing.lng], {
             icon: L.divIcon({ className: isViewed(listing.id) ? "abs-pin abs-pin--viewed" : "abs-pin", html: label, iconSize: null }),
@@ -1109,12 +1122,23 @@
           marker.addTo(layer);
           markers.set(listing.id, marker);
         }
-        if (fit) fitAll();
         updateDensity();
       },
-      // Re-reads the viewed state of the pins on the map.
+      // Frames these listings — all collected ones, so the frame does not depend on the filters.
+      fit(listings) {
+        const points = listings.filter(hasPoint).map((listing) => [listing.lat, listing.lng]);
+        if (points.length === 0) return;
+        frame = L.latLngBounds(points);
+        fitFrame();
+        updateDensity();
+      },
+      // Back to the last frame (the narrow-screen switch to the map uses it).
+      fitAll: fitFrame,
+      // Re-reads the viewed state of the pins on the map and of the open popup's card.
       refreshViewed() {
         for (const [id, marker] of markers) marker.getElement()?.classList.toggle("abs-pin--viewed", isViewed(id));
+        const card = container.querySelector(".leaflet-popup a.abs-card");
+        if (card) setCardViewed(card, isViewed(card.dataset.id));
       },
       highlight(id) {
         const previous = highlighted && markers.get(highlighted);
@@ -1129,10 +1153,8 @@
           marker.setZIndexOffset(1e4);
         }
       },
-      // A note at the bottom of the map with a close button; shown at most once per map.
+      // A note at the bottom of the map with a close button.
       showHint(text, closeLabel, onDismiss) {
-        if (hintShown) return;
-        hintShown = true;
         const control = L.control({ position: "bottomleft" });
         control.onAdd = () => {
           const box = el("div", "abs-map-hint");
@@ -1157,7 +1179,6 @@
       invalidateSize() {
         map.invalidateSize();
       },
-      fitAll,
       // Leaflet listens on window (resize) until the map is removed.
       remove() {
         resizeObserver.disconnect();
@@ -1214,6 +1235,7 @@
             option.addEventListener("click", () => {
               closeMenus();
               onFilter({ [key]: step });
+              pill.focus();
             });
             return option;
           }));
@@ -1245,7 +1267,7 @@
         reviews.draw(filters.minReviews, reviewCounts);
         area.box.checked = onlyInMap;
         hide.box.checked = filters.hideViewed;
-        resetBtn.style.visibility = hasActiveFilters(filters) || onlyInMap ? "visible" : "hidden";
+        resetBtn.hidden = !(hasActiveFilters(filters) || onlyInMap);
       }
     };
   }
@@ -1280,7 +1302,7 @@
       fromCache: false,
       sortId: startSort,
       onlyInMap: false,
-      filters: { ...NO_FILTERS, ...initialFilters }
+      filters: sanitizeFilters(initialFilters)
     };
     let viewed = new Set(viewedIds);
     let hidden = new Set(viewed);
@@ -1359,30 +1381,29 @@
       refreshBtn.disabled = mode === "progress";
       summaryLine.hidden = mode !== "results";
     }
-    let filterVersion = 0;
-    let mapVersion = -1;
-    let fitNext = false;
+    let mapStale = true;
     function setFilters(filters) {
       state.filters = filters;
       hidden = new Set(viewed);
-      filterVersion++;
+      mapStale = true;
       onFiltersChange?.(filters);
       render();
     }
     function resetFilters() {
       state.onlyInMap = false;
       setFilters({ ...NO_FILTERS });
+      list3.el.focus({ preventScroll: true });
     }
     let shownKey = "";
     function render() {
       const filtered = filterListings(state.listings, state.filters, isHidden);
-      if (map && mapVersion !== filterVersion) {
-        mapVersion = filterVersion;
-        map.setListings(filtered, { fit: fitNext });
-        fitNext = false;
+      if (map && mapStale) {
+        mapStale = false;
+        map.setListings(filtered);
       }
       let shown = filtered;
-      if (state.onlyInMap && map && mapBox.clientWidth > 0) shown = filterByBounds(shown, map.getBounds());
+      const bounds = state.onlyInMap && map && mapBox.clientWidth > 0 ? map.getBounds() : null;
+      if (bounds) shown = filterByBounds(shown, bounds);
       const sorted = sortListings(shown, state.sortId);
       const key = sorted.map((l) => l.id).join(",");
       if (key !== shownKey) {
@@ -1391,10 +1412,10 @@
       }
       emptyBox.hidden = sorted.length > 0 || state.listings.length === 0;
       if (!emptyBox.hidden) {
-        const elsewhere = filtered.length > 0;
-        emptyText.textContent = elsewhere ? t().filters.emptyArea : t().filters.empty;
-        emptyHint.textContent = elsewhere ? t().mapHint : "";
-        emptyHint.hidden = !elsewhere;
+        const nothingHere = bounds !== null && filterByBounds(state.listings, bounds).length === 0;
+        emptyText.textContent = nothingHere ? t().filters.emptyArea : t().filters.empty;
+        emptyHint.textContent = nothingHere ? t().mapHint : "";
+        emptyHint.hidden = !nothingHere;
       }
       const narrowed = hasActiveFilters(state.filters) || state.onlyInMap;
       summary.textContent = summaryText(state.meta, state.listings.length, narrowed ? shown.length : null, { fromCache: state.fromCache });
@@ -1404,8 +1425,8 @@
       toolbar.draw({
         filters: state.filters,
         onlyInMap: state.onlyInMap,
-        ratingCounts: thresholdCounts(state.listings, state.filters, "minRating", RATING_STEPS, isHidden),
-        reviewCounts: thresholdCounts(state.listings, state.filters, "minReviews", REVIEW_STEPS, isHidden)
+        ratingCounts: thresholdCounts(state.listings, state.filters, "minRating", RATING_STEPS, isViewed),
+        reviewCounts: thresholdCounts(state.listings, state.filters, "minReviews", REVIEW_STEPS, isViewed)
       });
     }
     function refreshViewed() {
@@ -1425,7 +1446,6 @@
       const card = e.target.closest("a.abs-card");
       if (!card) return;
       viewed.add(card.dataset.id);
-      setCardViewed(card, true);
       refreshViewed();
       onListingOpen?.(card.dataset.id);
     }
@@ -1496,8 +1516,7 @@
         Object.assign(state, { listings, meta, fromCache });
         shownKey = "";
         hidden = new Set(viewed);
-        filterVersion++;
-        fitNext = true;
+        mapStale = true;
         sub.textContent = describeSearch(meta);
         setMode("results");
         if (api.isOpen()) list3.el.focus({ preventScroll: true });
@@ -1511,6 +1530,7 @@
           onUserMove
         }));
         map.invalidateSize();
+        map.fit(listings);
         render();
       }
     };
@@ -1529,7 +1549,6 @@
   async function start({ L, leafletCss, storage, watch }) {
     if (!claimPage(document)) return false;
     let settings = await loadSettings(storage);
-    let viewed = await loadViewed(storage);
     const applyLocale = () => setLocale(resolveLocale(
       settings.language,
       () => detectLocale({ pageLang: document.documentElement.lang, browserLang: navigator.language })
@@ -1539,8 +1558,12 @@
       settings = { ...settings, ...patch };
       void saveSettings(storage, patch);
     };
-    const recordView = async (id) => {
-      viewed = await markViewed(storage, id);
+    let stored = await loadViewed(storage);
+    let opened = {};
+    const viewedIds = () => Object.keys({ ...stored, ...opened });
+    const recordView = (id) => {
+      opened = { ...opened, [id]: Date.now() };
+      void markViewed(storage, id);
     };
     let overlay = null;
     let overlayLocale = null;
@@ -1560,15 +1583,13 @@
           css: `${leafletCss}
 ${styles_default}`,
           initialSort: settings.sort,
-          initialFilters: { minRating: settings.minRating, minReviews: settings.minReviews, hideViewed: settings.hideViewed },
-          viewedIds: Object.keys(viewed),
+          initialFilters: settings,
+          viewedIds: viewedIds(),
           showMapHint: !settings.mapHintSeen,
           supportUrl: SUPPORT_LINKS[0]?.url,
           onSortChange: (sort) => saveSetting({ sort }),
           onFiltersChange: (filters) => saveSetting(filters),
-          onListingOpen: (id) => {
-            void recordView(id);
-          },
+          onListingOpen: (id) => recordView(id),
           onMapHintDismiss: () => saveSetting({ mapHintSeen: true }),
           onRefresh: () => run(true),
           onCancel: () => controller?.abort(),
@@ -1591,14 +1612,17 @@ ${styles_default}`,
         shownKey = null;
         view.showProgress(null, title);
       }
-      const [cached, stored] = await Promise.all([force ? null : loadCache(storage, searchUrl), loadViewed(storage)]);
+      const [cached, reread] = await Promise.all([
+        force ? null : loadCache(storage, searchUrl),
+        watch ? null : loadViewed(storage)
+      ]);
       if (current !== controller) return;
       if (current.signal.aborted) {
         view.close();
         return;
       }
-      viewed = stored;
-      view.setViewed(Object.keys(viewed));
+      if (reread) stored = reread;
+      view.setViewed(viewedIds());
       if (cached) {
         try {
           view.showResults(cached, { fromCache: true });
@@ -1633,11 +1657,12 @@ ${styles_default}`,
       view.showResults(result);
       shownKey = key;
     }
+    let pageListing = null;
     const launcher = createLauncher(() => run(false), {
-      // A listing page opened on Airbnb itself counts as viewed too.
       onUrlChange: (pathname) => {
         const id = listingIdFromPath(pathname);
-        if (id) void recordView(id);
+        if (id && id !== pageListing) recordView(id);
+        pageListing = id;
       }
     });
     watch?.(SETTINGS_KEY, async () => {
@@ -1647,8 +1672,10 @@ ${styles_default}`,
       if (getLocale() !== previous) launcher.refreshLabel();
     });
     watch?.(VIEWED_KEY, async () => {
-      viewed = await loadViewed(storage);
-      overlay?.setViewed(Object.keys(viewed));
+      const next = await loadViewed(storage);
+      if (Object.keys(stored).some((id) => !Object.hasOwn(next, id))) opened = {};
+      stored = next;
+      overlay?.setViewed(viewedIds());
     });
     return true;
   }

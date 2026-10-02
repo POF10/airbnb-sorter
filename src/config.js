@@ -6,8 +6,8 @@ export const PRIVACY_URL = 'https://github.com/POF10/airbnb-sorter/blob/main/PRI
 export const STORE_URL = 'https://chromewebstore.google.com/detail/price-sorter-for-airbnb/fpjgmgmmkdefjjdpplcdppkajpojdnkg';
 export const REVIEWS_URL = `${STORE_URL}/reviews`;
 
-// Donation pages; the first one is the primary link (the ♥ in the overlay header). An empty list hides
-// every support control.
+// Donation pages; the first one is the primary link (the ♥ in the overlay header). With an empty list the
+// overlay has no ♥ and the popup offers only the Rate link.
 export const SUPPORT_LINKS = [
   { label: 'PayPal', url: 'https://paypal.me/Maksims1001' },
 ];

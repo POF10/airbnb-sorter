@@ -20,14 +20,14 @@ async function fetchPage(url, signal) {
 // env: {
 //   L: Leaflet, leafletCss: string,
 //   storage: { get(key, fallback), set(key, value) } — sync or async,
-//   watch?: (key, callback) — calls back when the key is changed elsewhere (the extension popup, another tab)
+//   watch?: (key, callback) — calls back whenever the key is written: by the extension popup, by another tab,
+//           and by this tab itself. Only the extension has it.
 // }
 // Resolves to false when another copy (userscript, extension, console build) already runs on the page.
 export async function start({ L, leafletCss, storage, watch }) {
   if (!claimPage(document)) return false;
 
   let settings = await loadSettings(storage);
-  let viewed = await loadViewed(storage);
   const applyLocale = () => setLocale(resolveLocale(
     settings.language,
     () => detectLocale({ pageLang: document.documentElement.lang, browserLang: navigator.language }),
@@ -38,8 +38,15 @@ export async function start({ L, leafletCss, storage, watch }) {
     settings = { ...settings, ...patch };
     void saveSettings(storage, patch);
   };
-  const recordView = async id => {
-    viewed = await markViewed(storage, id);
+
+  // Viewed listings: what the storage holds plus what was opened on this page. The page's own views are kept
+  // apart so that they survive a storage that cannot be written, and a stale read cannot drop them.
+  let stored = await loadViewed(storage);
+  let opened = {};
+  const viewedIds = () => Object.keys({ ...stored, ...opened });
+  const recordView = id => {
+    opened = { ...opened, [id]: Date.now() };
+    void markViewed(storage, id);
   };
 
   let overlay = null;
@@ -63,13 +70,13 @@ export async function start({ L, leafletCss, storage, watch }) {
         L,
         css: `${leafletCss}\n${css}`,
         initialSort: settings.sort,
-        initialFilters: { minRating: settings.minRating, minReviews: settings.minReviews, hideViewed: settings.hideViewed },
-        viewedIds: Object.keys(viewed),
+        initialFilters: settings,
+        viewedIds: viewedIds(),
         showMapHint: !settings.mapHintSeen,
         supportUrl: SUPPORT_LINKS[0]?.url,
         onSortChange: sort => saveSetting({ sort }),
         onFiltersChange: filters => saveSetting(filters),
-        onListingOpen: id => { void recordView(id); },
+        onListingOpen: id => recordView(id),
         onMapHintDismiss: () => saveSetting({ mapHintSeen: true }),
         onRefresh: () => run(true),
         onCancel: () => controller?.abort(),
@@ -99,16 +106,19 @@ export async function start({ L, leafletCss, storage, watch }) {
       shownKey = null;
       view.showProgress(null, title);
     }
-    const [cached, stored] = await Promise.all([force ? null : loadCache(storage, searchUrl), loadViewed(storage)]);
+    // Without watch() nothing tells this tab about listings opened in other tabs, so they are re-read here.
+    const [cached, reread] = await Promise.all([
+      force ? null : loadCache(storage, searchUrl),
+      watch ? null : loadViewed(storage),
+    ]);
     if (current !== controller) return; // another click took over while the storage was being read
     if (current.signal.aborted) {
       // Closed or cancelled during the read: nothing has been collected, so there is nothing to show.
       view.close();
       return;
     }
-    // Listings opened in other tabs since the overlay was last shown.
-    viewed = stored;
-    view.setViewed(Object.keys(viewed));
+    if (reread) stored = reread;
+    view.setViewed(viewedIds());
     if (cached) {
       try {
         view.showResults(cached, { fromCache: true });
@@ -145,11 +155,14 @@ export async function start({ L, leafletCss, storage, watch }) {
     shownKey = key;
   }
 
+  // A listing page opened on Airbnb itself counts as viewed too. The page changes its own URL (photos,
+  // dates), so the same listing is recorded once.
+  let pageListing = null;
   const launcher = createLauncher(() => run(false), {
-    // A listing page opened on Airbnb itself counts as viewed too.
     onUrlChange: pathname => {
       const id = listingIdFromPath(pathname);
-      if (id) void recordView(id);
+      if (id && id !== pageListing) recordView(id);
+      pageListing = id;
     },
   });
 
@@ -160,8 +173,11 @@ export async function start({ L, leafletCss, storage, watch }) {
     if (getLocale() !== previous) launcher.refreshLabel();
   });
   watch?.(VIEWED_KEY, async () => {
-    viewed = await loadViewed(storage);
-    overlay?.setViewed(Object.keys(viewed));
+    const next = await loadViewed(storage);
+    // Entries disappearing means the list was cleared from the popup: this page's own views go with it.
+    if (Object.keys(stored).some(id => !Object.hasOwn(next, id))) opened = {};
+    stored = next;
+    overlay?.setViewed(viewedIds());
   });
   return true;
 }

@@ -22,6 +22,7 @@ test('hasPlaceholderSupportLinks spots example.com entries', () => {
 
 test('the privacy policy lives in the repository, the reviews on the store page', () => {
   assert.ok(PRIVACY_URL.startsWith(`${HOMEPAGE_URL}/`));
+  assert.ok(PRIVACY_URL.endsWith('/PRIVACY.md'));
   assert.equal(new URL(STORE_URL).hostname, 'chromewebstore.google.com');
   assert.equal(REVIEWS_URL, `${STORE_URL}/reviews`);
 });

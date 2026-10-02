@@ -37,6 +37,8 @@ function createCarousel(listing) {
         e.stopPropagation();
         show(index + step);
       });
+      // A middle click on an arrow must not open the listing the card links to.
+      btn.addEventListener('auxclick', e => e.preventDefault());
     }
     box.append(prev, next, dots);
     show(0);

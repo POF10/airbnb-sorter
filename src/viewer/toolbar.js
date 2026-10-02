@@ -3,8 +3,8 @@ import { SORTS, RATING_STEPS, REVIEW_STEPS, hasActiveFilters, formatCount } from
 import { t } from '../i18n.js';
 
 // The row of controls that decide what is shown: sort order, rating and review thresholds, the two
-// toggles and Reset. It keeps no state of its own: draw() repaints it from the overlay's state, and
-// every user action comes back through a callback.
+// toggles and Reset. The filters and the toggles are the overlay's state: draw() repaints them, and
+// every user action comes back through a callback. The toolbar itself only knows which menu is open.
 //   onSort(sortId), onFilter(patch of { minRating, minReviews, hideViewed }), onAreaToggle(checked), onReset()
 export function createToolbar({ sortId, onSort, onFilter, onAreaToggle, onReset }) {
   const sortSelect = el('select', 'abs-select abs-select--small');
@@ -57,6 +57,7 @@ export function createToolbar({ sortId, onSort, onFilter, onAreaToggle, onReset 
           option.addEventListener('click', () => {
             closeMenus();
             onFilter({ [key]: step });
+            pill.focus(); // the option is gone; without this the focus would fall out of the overlay
           });
           return option;
         }));
@@ -92,8 +93,7 @@ export function createToolbar({ sortId, onSort, onFilter, onAreaToggle, onReset 
       reviews.draw(filters.minReviews, reviewCounts);
       area.box.checked = onlyInMap;
       hide.box.checked = filters.hideViewed;
-      // Kept in the layout while hidden, so the row does not jump when it appears.
-      resetBtn.style.visibility = hasActiveFilters(filters) || onlyInMap ? 'visible' : 'hidden';
+      resetBtn.hidden = !(hasActiveFilters(filters) || onlyInMap);
     },
   };
 }

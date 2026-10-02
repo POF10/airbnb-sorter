@@ -2,10 +2,9 @@ import { el, button } from './dom.js';
 import { createList } from './list.js';
 import { createMap } from './map.js';
 import { createToolbar } from './toolbar.js';
-import { setCardViewed } from './card.js';
 import {
-  SORTS, DEFAULT_SORT, NO_FILTERS, RATING_STEPS, REVIEW_STEPS, sortListings, filterListings, thresholdCounts,
-  hasActiveFilters, filterByBounds, describeSearch, summaryText, partialReasons, progressText,
+  SORTS, DEFAULT_SORT, NO_FILTERS, RATING_STEPS, REVIEW_STEPS, sanitizeFilters, sortListings, filterListings,
+  thresholdCounts, hasActiveFilters, filterByBounds, describeSearch, summaryText, partialReasons, progressText,
 } from './logic.js';
 import { t } from '../i18n.js';
 
@@ -31,7 +30,7 @@ export function createOverlay({
   const startSort = Object.hasOwn(SORTS, initialSort ?? '') ? initialSort : DEFAULT_SORT;
   const state = {
     listings: [], meta: null, fromCache: false, sortId: startSort, onlyInMap: false,
-    filters: { ...NO_FILTERS, ...initialFilters },
+    filters: sanitizeFilters(initialFilters),
   };
   let viewed = new Set(viewedIds);
   // "Hide viewed" works on a snapshot, so a card opened a moment ago does not vanish from under the cursor.
@@ -123,15 +122,13 @@ export function createOverlay({
     summaryLine.hidden = mode !== 'results'; // counts belong to the results on screen
   }
 
-  // The map shows what passed the filters; it is redrawn only when that set may have changed.
-  let filterVersion = 0;
-  let mapVersion = -1;
-  let fitNext = false;
+  // The map shows what passed the filters; its pins are redrawn only when that set may have changed.
+  let mapStale = true;
 
   function setFilters(filters) {
     state.filters = filters;
     hidden = new Set(viewed);
-    filterVersion++;
+    mapStale = true;
     onFiltersChange?.(filters);
     render();
   }
@@ -139,22 +136,23 @@ export function createOverlay({
   function resetFilters() {
     state.onlyInMap = false;
     setFilters({ ...NO_FILTERS });
+    // The button that was pressed is gone now; keep the focus inside the overlay.
+    list.el.focus({ preventScroll: true });
   }
 
   // Re-rendering the list resets its scroll, so it only happens when the shown listings actually change.
   let shownKey = '';
   function render() {
     const filtered = filterListings(state.listings, state.filters, isHidden);
-    if (map && mapVersion !== filterVersion) {
-      mapVersion = filterVersion;
-      // Pins follow the filters; the view only moves for new results.
-      map.setListings(filtered, { fit: fitNext });
-      fitNext = false;
+    if (map && mapStale) {
+      mapStale = false;
+      map.setListings(filtered); // pins follow the filters; the view stays where it is
     }
 
     let shown = filtered;
     // While hidden (narrow screens, list view) the map has no size and its bounds are meaningless.
-    if (state.onlyInMap && map && mapBox.clientWidth > 0) shown = filterByBounds(shown, map.getBounds());
+    const bounds = state.onlyInMap && map && mapBox.clientWidth > 0 ? map.getBounds() : null;
+    if (bounds) shown = filterByBounds(shown, bounds);
     const sorted = sortListings(shown, state.sortId);
     const key = sorted.map(l => l.id).join(',');
     if (key !== shownKey) {
@@ -162,13 +160,13 @@ export function createOverlay({
       list.set(sorted);
     }
 
-    // Empty because of the filters, or only because nothing was collected in the visible area.
+    // Nothing to show: either the filters removed everything there was, or nothing was collected in this area.
     emptyBox.hidden = sorted.length > 0 || state.listings.length === 0;
     if (!emptyBox.hidden) {
-      const elsewhere = filtered.length > 0;
-      emptyText.textContent = elsewhere ? t().filters.emptyArea : t().filters.empty;
-      emptyHint.textContent = elsewhere ? t().mapHint : '';
-      emptyHint.hidden = !elsewhere;
+      const nothingHere = bounds !== null && filterByBounds(state.listings, bounds).length === 0;
+      emptyText.textContent = nothingHere ? t().filters.emptyArea : t().filters.empty;
+      emptyHint.textContent = nothingHere ? t().mapHint : '';
+      emptyHint.hidden = !nothingHere;
     }
 
     const narrowed = hasActiveFilters(state.filters) || state.onlyInMap;
@@ -176,11 +174,12 @@ export function createOverlay({
     const reasons = state.meta.partial ? partialReasons(state.meta) : [];
     warn.hidden = reasons.length === 0;
     warn.title = t().partial(reasons.join('; '));
+    // Counts say what choosing an option would give, and choosing retakes the "hide viewed" snapshot.
     toolbar.draw({
       filters: state.filters,
       onlyInMap: state.onlyInMap,
-      ratingCounts: thresholdCounts(state.listings, state.filters, 'minRating', RATING_STEPS, isHidden),
-      reviewCounts: thresholdCounts(state.listings, state.filters, 'minReviews', REVIEW_STEPS, isHidden),
+      ratingCounts: thresholdCounts(state.listings, state.filters, 'minRating', RATING_STEPS, isViewed),
+      reviewCounts: thresholdCounts(state.listings, state.filters, 'minReviews', REVIEW_STEPS, isViewed),
     });
   }
 
@@ -197,7 +196,8 @@ export function createOverlay({
     map.showHint(t().mapHint, t().dismiss, () => onMapHintDismiss?.());
   }
 
-  // Capture phase: Leaflet stops click propagation inside its popups, where the compact cards live.
+  // Capture phase: the photo arrows stop the propagation of their clicks, and a click on them must still
+  // close an open menu.
   function onRootClick(e) {
     if (!e.target.closest('.abs-dd')) toolbar.closeMenus();
     if (e.type === 'auxclick' && e.button !== 1) return; // only the middle button opens a link
@@ -205,7 +205,6 @@ export function createOverlay({
     const card = e.target.closest('a.abs-card');
     if (!card) return;
     viewed.add(card.dataset.id);
-    setCardViewed(card, true); // the popup card is not part of the list
     refreshViewed();
     onListingOpen?.(card.dataset.id);
   }
@@ -278,8 +277,7 @@ export function createOverlay({
       Object.assign(state, { listings, meta, fromCache });
       shownKey = ''; // new data: always re-render, even if the ids are the same
       hidden = new Set(viewed);
-      filterVersion++;
-      fitNext = true;
+      mapStale = true;
       sub.textContent = describeSearch(meta);
       setMode('results');
       if (api.isOpen()) list.el.focus({ preventScroll: true });
@@ -291,6 +289,8 @@ export function createOverlay({
         onUserMove,
       });
       map.invalidateSize();
+      // The frame is everything collected, whatever the filters leave: changing them later must not move the map.
+      map.fit(listings);
       render();
     },
   };

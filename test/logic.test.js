@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   SORTS, DEFAULT_SORT, sortListings, filterByBounds, formatMoney, formatRating, photoUrl,
-  RATING_STEPS, REVIEW_STEPS, NO_FILTERS, hasActiveFilters, passesFilters, filterListings, thresholdCounts, formatCount,
+  RATING_STEPS, REVIEW_STEPS, NO_FILTERS, sanitizeFilters, hasActiveFilters, passesFilters, filterListings, thresholdCounts, formatCount,
   describeSearch, formatAge, summaryText, partialReasons, progressText,
 } from '../src/viewer/logic.js';
 import { setLocale } from '../src/i18n.js';
@@ -158,6 +158,7 @@ test('hasActiveFilters', () => {
   assert.equal(hasActiveFilters({ ...NO_FILTERS, minRating: 4.5 }), true);
   assert.equal(hasActiveFilters({ ...NO_FILTERS, minReviews: 5 }), true);
   assert.equal(hasActiveFilters({ ...NO_FILTERS, hideViewed: true }), true);
+  assert.equal(hasActiveFilters({ minRating: 0, minReviews: 0 }), false); // a boolean even when a field is missing
 });
 
 test('no filters keep everything, including listings without a rating', () => {
@@ -198,5 +199,20 @@ test('describeSearch says when the search was limited to a map area', () => {
   const bounds = 'ne_lat=57.1&ne_lng=24.3&sw_lat=56.9&sw_lng=23.9';
   assert.equal(describeSearch({ placeLabel: 'Riga, Latvia', searchUrl: `https://www.airbnb.com/s/Riga--Latvia/homes?adults=2&${bounds}` }), 'Riga, Latvia · 2 гостя · область карты');
   assert.equal(describeSearch({ placeLabel: null, searchUrl: `https://www.airbnb.com/s/homes?${bounds}` }), 'область карты');
-  assert.equal(describeSearch({ placeLabel: 'X', searchUrl: 'https://www.airbnb.com/s/X/homes?ne_lat=57.1&ne_lng=24.3' }), 'X'); // incomplete bounds
+  // incomplete bounds: any three of the four, or one corner only
+  for (const partial of ['ne_lat=57.1&ne_lng=24.3', 'sw_lat=56.9&sw_lng=23.9', 'ne_lat=57.1&ne_lng=24.3&sw_lat=56.9', 'ne_lng=24.3&sw_lat=56.9&sw_lng=23.9']) {
+    assert.equal(describeSearch({ placeLabel: 'X', searchUrl: `https://www.airbnb.com/s/X/homes?${partial}` }), 'X', partial);
+  }
+});
+
+test('sanitizeFilters keeps offered thresholds and real booleans only', () => {
+  for (const minRating of RATING_STEPS) assert.equal(sanitizeFilters({ minRating }).minRating, minRating);
+  for (const minReviews of REVIEW_STEPS) assert.equal(sanitizeFilters({ minReviews }).minReviews, minReviews);
+  assert.deepEqual(sanitizeFilters({ minRating: 4.8, minReviews: 20, hideViewed: true }), { minRating: 4.8, minReviews: 20, hideViewed: true });
+  assert.deepEqual(sanitizeFilters({ minRating: 4.6, minReviews: 7, hideViewed: 'yes' }), NO_FILTERS);
+  assert.deepEqual(sanitizeFilters({ minRating: 20, minReviews: 4.8 }), NO_FILTERS); // a step of the other filter
+  assert.deepEqual(sanitizeFilters({ minRating: '4.8', minReviews: '20', hideViewed: 1 }), NO_FILTERS);
+  for (const junk of [null, undefined, 'x', 42]) assert.deepEqual(sanitizeFilters(junk), NO_FILTERS);
+  // other fields (a whole settings object is passed in) are ignored
+  assert.deepEqual(sanitizeFilters({ language: 'ru', sort: 'price-asc', minRating: 4.5 }), { ...NO_FILTERS, minRating: 4.5 });
 });

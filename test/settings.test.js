@@ -27,6 +27,9 @@ test('normalizeSettings accepts only the offered filter thresholds and real bool
   assert.deepEqual(normalizeSettings({ minRating: 4.6, minReviews: 7 }), DEFAULT_SETTINGS); // not on the list
   assert.deepEqual(normalizeSettings({ minRating: '4.8', minReviews: '20' }), DEFAULT_SETTINGS); // strings are not thresholds
   assert.deepEqual(normalizeSettings({ hideViewed: 'yes', mapHintSeen: 1 }), DEFAULT_SETTINGS);
+  // the two flags are independent
+  assert.deepEqual(normalizeSettings({ mapHintSeen: true }), withDefaults({ mapHintSeen: true }));
+  assert.deepEqual(normalizeSettings({ hideViewed: true }), withDefaults({ hideViewed: true }));
 });
 
 for (const [kind, makeStorage] of [['sync', memoryStorage], ['async', asyncStorage]]) {
