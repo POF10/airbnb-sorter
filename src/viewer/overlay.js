@@ -1,15 +1,25 @@
 import { el, button } from './dom.js';
 import { createList } from './list.js';
 import { createMap } from './map.js';
+import { createToolbar } from './toolbar.js';
+import { setCardViewed } from './card.js';
 import {
-  SORTS, DEFAULT_SORT, sortListings, filterByBounds, describeSearch, summaryText, partialReasons, progressText,
+  SORTS, DEFAULT_SORT, NO_FILTERS, RATING_STEPS, REVIEW_STEPS, sortListings, filterListings, thresholdCounts,
+  hasActiveFilters, filterByBounds, describeSearch, summaryText, partialReasons, progressText,
 } from './logic.js';
 import { t } from '../i18n.js';
 
 // Full-screen layer in a Shadow DOM. Knows nothing about Airbnb or storage: renders { listings, meta } and
-// reports user intents. L — Leaflet; css — Leaflet CSS + styles.css; initialSort — the sort to open with;
-// supportUrl — where the ♥ in the header leads (no link without it).
-export function createOverlay({ L, css, initialSort, supportUrl, onSortChange, onRefresh, onCancel, onClose }) {
+// reports user intents.
+//   L — Leaflet; css — Leaflet CSS + styles.css;
+//   initialSort, initialFilters — the sort order and { minRating, minReviews, hideViewed } to open with;
+//   viewedIds — ids of the listings the user has already opened;
+//   showMapHint — whether the "only collected results" note may still appear on the map;
+//   supportUrl — where the ♥ in the header leads (no link without it).
+export function createOverlay({
+  L, css, initialSort, initialFilters, viewedIds = [], showMapHint = false, supportUrl,
+  onSortChange, onFiltersChange, onListingOpen, onMapHintDismiss, onRefresh, onCancel, onClose,
+}) {
   const host = document.createElement('div');
   host.id = 'airbnb-sorter';
   // Inline, so no page rule matching the host div can override the placement.
@@ -18,7 +28,19 @@ export function createOverlay({ L, css, initialSort, supportUrl, onSortChange, o
   const style = document.createElement('style');
   style.textContent = css;
 
-  // Header
+  const startSort = Object.hasOwn(SORTS, initialSort ?? '') ? initialSort : DEFAULT_SORT;
+  const state = {
+    listings: [], meta: null, fromCache: false, sortId: startSort, onlyInMap: false,
+    filters: { ...NO_FILTERS, ...initialFilters },
+  };
+  let viewed = new Set(viewedIds);
+  // "Hide viewed" works on a snapshot, so a card opened a moment ago does not vanish from under the cursor.
+  // The snapshot is retaken when the filters change and when results are shown.
+  let hidden = new Set(viewed);
+  const isViewed = id => viewed.has(id);
+  const isHidden = id => hidden.has(id);
+
+  // Header: what was collected on the left, utilities on the right.
   const sub = el('div', 'abs-sub');
   const summary = el('span');
   const warn = el('span', 'abs-warn', '⚠');
@@ -28,24 +50,12 @@ export function createOverlay({ L, css, initialSort, supportUrl, onSortChange, o
   const info = el('div', 'abs-info');
   info.append(sub, summaryLine);
 
-  const startSort = Object.hasOwn(SORTS, initialSort ?? '') ? initialSort : DEFAULT_SORT;
-  const sortSelect = el('select', 'abs-select');
-  for (const [id, { label }] of Object.entries(SORTS)) {
-    const option = el('option', null, label);
-    option.value = id;
-    sortSelect.append(option);
-  }
-  sortSelect.value = startSort;
-  const areaBox = el('input');
-  areaBox.type = 'checkbox';
-  const areaLabel = el('label', 'abs-toggle');
-  areaLabel.append(areaBox, t().onlyInMap);
   const refreshBtn = button(t().refresh, 'abs-btn');
   const viewBtn = button(t().showMap, 'abs-btn abs-only-narrow');
   const closeBtn = button('×', 'abs-close');
   closeBtn.title = t().close;
   const controls = el('div', 'abs-controls');
-  controls.append(sortSelect, areaLabel, refreshBtn, viewBtn);
+  controls.append(refreshBtn, viewBtn);
   if (supportUrl) {
     const support = el('a', 'abs-support', '♥');
     support.href = supportUrl;
@@ -59,6 +69,22 @@ export function createOverlay({ L, css, initialSort, supportUrl, onSortChange, o
   const head = el('header', 'abs-head');
   head.append(info, controls);
 
+  // Toolbar: everything that changes what is shown.
+  const toolbar = createToolbar({
+    sortId: startSort,
+    onSort: sortId => {
+      state.sortId = sortId;
+      onSortChange?.(sortId);
+      render();
+    },
+    onFilter: patch => setFilters({ ...state.filters, ...patch }),
+    onAreaToggle: checked => {
+      state.onlyInMap = checked;
+      render();
+    },
+    onReset: () => resetFilters(),
+  });
+
   // Body: progress | error | results
   const progressLabel = el('div');
   const cancelBtn = button(t().cancel, 'abs-btn');
@@ -66,35 +92,67 @@ export function createOverlay({ L, css, initialSort, supportUrl, onSortChange, o
   progress.append(el('div', 'abs-spinner'), progressLabel, cancelBtn);
   const errorBox = el('div', 'abs-error');
   let map = null;
-  const list = createList({ onHover: id => map?.highlight(id) });
+  const list = createList({ onHover: id => map?.highlight(id), isViewed });
   list.el.tabIndex = -1; // focused with the results, so keys scroll the list
+  const emptyText = el('p', 'abs-empty-text');
+  const emptyHint = el('p', 'abs-empty-hint');
+  const emptyReset = button(t().filters.reset, 'abs-btn');
+  const emptyBox = el('div', 'abs-empty');
+  emptyBox.append(emptyText, emptyHint, emptyReset);
+  emptyBox.hidden = true;
+  list.el.prepend(emptyBox);
   const mapBox = el('div', 'abs-map');
   const main = el('main', 'abs-main');
   main.append(list.el, mapBox);
 
   const root = el('div', 'abs-root');
   root.tabIndex = -1; // focused on open, so keys no longer reach the launcher under the overlay
-  root.append(head, progress, errorBox, main);
+  root.append(head, toolbar.el, progress, errorBox, main);
   shadow.append(style, root);
   document.body.append(host);
 
-  const state = { listings: [], meta: null, fromCache: false, sortId: startSort, onlyInMap: false };
   let savedOverflow = '';
 
   function setMode(mode) {
     progress.hidden = mode !== 'progress';
     errorBox.hidden = mode !== 'error';
     main.hidden = mode !== 'results';
-    sortSelect.disabled = mode !== 'results';
-    areaBox.disabled = mode !== 'results';
+    toolbar.el.hidden = mode !== 'results';
+    if (mode !== 'results') toolbar.closeMenus();
     refreshBtn.disabled = mode === 'progress';
     summaryLine.hidden = mode !== 'results'; // counts belong to the results on screen
+  }
+
+  // The map shows what passed the filters; it is redrawn only when that set may have changed.
+  let filterVersion = 0;
+  let mapVersion = -1;
+  let fitNext = false;
+
+  function setFilters(filters) {
+    state.filters = filters;
+    hidden = new Set(viewed);
+    filterVersion++;
+    onFiltersChange?.(filters);
+    render();
+  }
+
+  function resetFilters() {
+    state.onlyInMap = false;
+    setFilters({ ...NO_FILTERS });
   }
 
   // Re-rendering the list resets its scroll, so it only happens when the shown listings actually change.
   let shownKey = '';
   function render() {
-    let shown = state.listings;
+    const filtered = filterListings(state.listings, state.filters, isHidden);
+    if (map && mapVersion !== filterVersion) {
+      mapVersion = filterVersion;
+      // Pins follow the filters; the view only moves for new results.
+      map.setListings(filtered, { fit: fitNext });
+      fitNext = false;
+    }
+
+    let shown = filtered;
     // While hidden (narrow screens, list view) the map has no size and its bounds are meaningless.
     if (state.onlyInMap && map && mapBox.clientWidth > 0) shown = filterByBounds(shown, map.getBounds());
     const sorted = sortListings(shown, state.sortId);
@@ -103,18 +161,58 @@ export function createOverlay({ L, css, initialSort, supportUrl, onSortChange, o
       shownKey = key;
       list.set(sorted);
     }
-    summary.textContent = summaryText(state.meta, state.listings.length, state.onlyInMap ? shown.length : null, { fromCache: state.fromCache });
+
+    // Empty because of the filters, or only because nothing was collected in the visible area.
+    emptyBox.hidden = sorted.length > 0 || state.listings.length === 0;
+    if (!emptyBox.hidden) {
+      const elsewhere = filtered.length > 0;
+      emptyText.textContent = elsewhere ? t().filters.emptyArea : t().filters.empty;
+      emptyHint.textContent = elsewhere ? t().mapHint : '';
+      emptyHint.hidden = !elsewhere;
+    }
+
+    const narrowed = hasActiveFilters(state.filters) || state.onlyInMap;
+    summary.textContent = summaryText(state.meta, state.listings.length, narrowed ? shown.length : null, { fromCache: state.fromCache });
     const reasons = state.meta.partial ? partialReasons(state.meta) : [];
     warn.hidden = reasons.length === 0;
     warn.title = t().partial(reasons.join('; '));
+    toolbar.draw({
+      filters: state.filters,
+      onlyInMap: state.onlyInMap,
+      ratingCounts: thresholdCounts(state.listings, state.filters, 'minRating', RATING_STEPS, isHidden),
+      reviewCounts: thresholdCounts(state.listings, state.filters, 'minReviews', REVIEW_STEPS, isHidden),
+    });
   }
 
-  sortSelect.addEventListener('change', () => {
-    state.sortId = sortSelect.value;
-    onSortChange?.(state.sortId);
-    render();
-  });
-  areaBox.addEventListener('change', () => { state.onlyInMap = areaBox.checked; render(); });
+  function refreshViewed() {
+    list.refreshViewed();
+    map?.refreshViewed();
+  }
+
+  // The first time the user moves the map: say that it only shows what was collected.
+  let hintPending = showMapHint;
+  function onUserMove() {
+    if (!hintPending) return;
+    hintPending = false;
+    map.showHint(t().mapHint, t().dismiss, () => onMapHintDismiss?.());
+  }
+
+  // Capture phase: Leaflet stops click propagation inside its popups, where the compact cards live.
+  function onRootClick(e) {
+    if (!e.target.closest('.abs-dd')) toolbar.closeMenus();
+    if (e.type === 'auxclick' && e.button !== 1) return; // only the middle button opens a link
+    if (e.target.closest('.abs-nav')) return; // flipping photos is not opening the listing
+    const card = e.target.closest('a.abs-card');
+    if (!card) return;
+    viewed.add(card.dataset.id);
+    setCardViewed(card, true); // the popup card is not part of the list
+    refreshViewed();
+    onListingOpen?.(card.dataset.id);
+  }
+  root.addEventListener('click', onRootClick, true);
+  root.addEventListener('auxclick', onRootClick, true);
+
+  emptyReset.addEventListener('click', () => resetFilters());
   refreshBtn.addEventListener('click', () => onRefresh());
   cancelBtn.addEventListener('click', () => onCancel());
   closeBtn.addEventListener('click', () => api.close());
@@ -130,6 +228,7 @@ export function createOverlay({ L, css, initialSort, supportUrl, onSortChange, o
   const onKey = e => {
     if (e.key !== 'Escape') return;
     e.stopPropagation();
+    if (toolbar.closeMenus()) return; // Esc closes an open menu first
     api.close();
   };
 
@@ -160,6 +259,11 @@ export function createOverlay({ L, css, initialSort, supportUrl, onSortChange, o
       list.destroy();
       host.remove();
     },
+    // ids of every listing the user has opened; repaints the marks without re-rendering the list.
+    setViewed(ids) {
+      viewed = new Set(ids);
+      refreshViewed();
+    },
     // title: the search being collected (the header may still show the previous one).
     showProgress(p, title) {
       setMode('progress');
@@ -173,16 +277,20 @@ export function createOverlay({ L, css, initialSort, supportUrl, onSortChange, o
     showResults({ listings, meta }, { fromCache = false } = {}) {
       Object.assign(state, { listings, meta, fromCache });
       shownKey = ''; // new data: always re-render, even if the ids are the same
+      hidden = new Set(viewed);
+      filterVersion++;
+      fitNext = true;
       sub.textContent = describeSearch(meta);
       setMode('results');
       if (api.isOpen()) list.el.focus({ preventScroll: true });
       map ??= createMap(mapBox, {
         L,
+        isViewed,
         onMarkerHover: id => list.highlight(id),
         onMoveEnd: () => { if (state.onlyInMap) render(); },
+        onUserMove,
       });
       map.invalidateSize();
-      map.setListings(listings);
       render();
     },
   };
