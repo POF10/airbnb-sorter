@@ -1,7 +1,8 @@
 import { collect, HttpError } from './collector.js';
 import { parseSearchUrl, placeLabel } from './search-url.js';
 import { loadCache, saveCache, cacheKey } from './cache.js';
-import { loadSettings, saveSettings, resolveLocale } from './settings.js';
+import { loadSettings, saveSettings, resolveLocale, SETTINGS_KEY } from './settings.js';
+import { loadViewed, markViewed, listingIdFromPath, VIEWED_KEY } from './viewed.js';
 import { claimPage } from './guard.js';
 import { SUPPORT_LINKS } from './config.js';
 import { createLauncher } from './launcher.js';
@@ -19,18 +20,27 @@ async function fetchPage(url, signal) {
 // env: {
 //   L: Leaflet, leafletCss: string,
 //   storage: { get(key, fallback), set(key, value) } — sync or async,
-//   onSettingsChange?: register a callback for settings changed elsewhere (the extension popup, another tab)
+//   watch?: (key, callback) — calls back when the key is changed elsewhere (the extension popup, another tab)
 // }
 // Resolves to false when another copy (userscript, extension, console build) already runs on the page.
-export async function start({ L, leafletCss, storage, onSettingsChange }) {
+export async function start({ L, leafletCss, storage, watch }) {
   if (!claimPage(document)) return false;
 
   let settings = await loadSettings(storage);
+  let viewed = await loadViewed(storage);
   const applyLocale = () => setLocale(resolveLocale(
     settings.language,
     () => detectLocale({ pageLang: document.documentElement.lang, browserLang: navigator.language }),
   ));
   applyLocale();
+
+  const saveSetting = patch => {
+    settings = { ...settings, ...patch };
+    void saveSettings(storage, patch);
+  };
+  const recordView = async id => {
+    viewed = await markViewed(storage, id);
+  };
 
   let overlay = null;
   let overlayLocale = null; // the language the overlay was built in
@@ -53,11 +63,14 @@ export async function start({ L, leafletCss, storage, onSettingsChange }) {
         L,
         css: `${leafletCss}\n${css}`,
         initialSort: settings.sort,
+        initialFilters: { minRating: settings.minRating, minReviews: settings.minReviews, hideViewed: settings.hideViewed },
+        viewedIds: Object.keys(viewed),
+        showMapHint: !settings.mapHintSeen,
         supportUrl: SUPPORT_LINKS[0]?.url,
-        onSortChange: sort => {
-          settings = { ...settings, sort };
-          void saveSettings(storage, { sort });
-        },
+        onSortChange: sort => saveSetting({ sort }),
+        onFiltersChange: filters => saveSetting(filters),
+        onListingOpen: id => { void recordView(id); },
+        onMapHintDismiss: () => saveSetting({ mapHintSeen: true }),
         onRefresh: () => run(true),
         onCancel: () => controller?.abort(),
         onClose: () => controller?.abort(),
@@ -86,13 +99,16 @@ export async function start({ L, leafletCss, storage, onSettingsChange }) {
       shownKey = null;
       view.showProgress(null, title);
     }
-    const cached = force ? null : await loadCache(storage, searchUrl);
-    if (current !== controller) return; // another click took over while the cache was being read
+    const [cached, stored] = await Promise.all([force ? null : loadCache(storage, searchUrl), loadViewed(storage)]);
+    if (current !== controller) return; // another click took over while the storage was being read
     if (current.signal.aborted) {
       // Closed or cancelled during the read: nothing has been collected, so there is nothing to show.
       view.close();
       return;
     }
+    // Listings opened in other tabs since the overlay was last shown.
+    viewed = stored;
+    view.setViewed(Object.keys(viewed));
     if (cached) {
       try {
         view.showResults(cached, { fromCache: true });
@@ -129,13 +145,23 @@ export async function start({ L, leafletCss, storage, onSettingsChange }) {
     shownKey = key;
   }
 
-  const launcher = createLauncher(() => run(false));
+  const launcher = createLauncher(() => run(false), {
+    // A listing page opened on Airbnb itself counts as viewed too.
+    onUrlChange: pathname => {
+      const id = listingIdFromPath(pathname);
+      if (id) void recordView(id);
+    },
+  });
 
-  onSettingsChange?.(async () => {
+  watch?.(SETTINGS_KEY, async () => {
     settings = await loadSettings(storage);
     const previous = getLocale();
     applyLocale();
     if (getLocale() !== previous) launcher.refreshLabel();
+  });
+  watch?.(VIEWED_KEY, async () => {
+    viewed = await loadViewed(storage);
+    overlay?.setViewed(Object.keys(viewed));
   });
   return true;
 }

@@ -10,8 +10,9 @@ const STYLE = [
 
 // Floating launch button, visible only on homes search pages. Airbnb is a SPA and the script runs
 // in an isolated world (it can't hook the page's history.pushState), so the URL is polled.
+//   onUrlChange(pathname) — called for the page the script starts on and for every later URL change.
 // Returns { refreshLabel() } to re-read the button text after a language change.
-export function createLauncher(onClick) {
+export function createLauncher(onClick, { onUrlChange } = {}) {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.textContent = t().launcher;
@@ -27,6 +28,7 @@ export function createLauncher(onClick) {
     if (location.href === lastHref) return;
     lastHref = location.href;
     btn.style.display = isHomesSearchPath(location.pathname) ? 'block' : 'none';
+    onUrlChange?.(location.pathname);
   };
   sync();
   setInterval(sync, 500);
