@@ -73,3 +73,17 @@ test('the popup how-to quotes the launcher button exactly', () => {
     assert.ok(t().popup.howTo.includes(t().launcher), locale);
   }
 });
+
+test('the map hint quotes the launcher button exactly', () => {
+  for (const locale of ['en', 'ru']) {
+    setLocale(locale);
+    assert.ok(t().mapHint.includes(t().launcher), locale);
+  }
+});
+
+test('the welcome page has three steps in each language', () => {
+  for (const locale of ['en', 'ru']) {
+    setLocale(locale);
+    assert.equal(t().welcome.steps.length, 3, locale);
+  }
+});
